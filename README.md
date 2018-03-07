@@ -3,7 +3,7 @@ JINAPyCEE
 
 Public <a href="http://www.jinaweb.org/">JINA</a> Python Chemical Evolution Environment
 
-This repository contains a series of multi-zone galactic chemical evolution codes written in Python 3. It represents an extension of the <a href="http://github.com/NuGrid/NuPyCEE">NuPyCEE</a> package and the end point of the <a href="http://www.jinaweb.org/">JINA</a>-<a href="http://www.nugridstars.org/">NuGrid</a> chemical evolution pipeline (see <a href="http://adsabs.harvard.edu/abs/2017nuco.confb0203C">Côté et al. 2017a</a>).
+This repository contains a series of multi-zone galactic chemical evolution codes written in Python 3. It represents an extension of the <a href="http://github.com/NuGrid/NuPyCEE">NuPyCEE</a> package (see also our <a href="http://nugrid.github.io/NuPyCEE/">website</a>) and the end point of the <a href="http://www.jinaweb.org/">JINA</a>-<a href="http://www.nugridstars.org/">NuGrid</a> chemical evolution pipeline (see <a href="http://adsabs.harvard.edu/abs/2017nuco.confb0203C">Côté et al. 2017a</a>).
 
 **OMEGA+** (<a href="http://adsabs.harvard.edu/abs/2017arXiv171006442C">Côté et al. 2017b</a>)
 
@@ -16,7 +16,7 @@ This repository contains a series of multi-zone galactic chemical evolution code
 - Semi-analytic code following the mass assembly of galaxies based on merger trees provided by cosmological simulations.
 - Evolution of each building-block galaxy (each branch of the merger tree) calculated by OMEGA+, a code part of JINAPyCEE.
 
-**Requirement**: <a href="http://github.com/NuGrid/NuPyCEE">NuPyCEE</a>. See also our <a href="http://nugrid.github.io/NuPyCEE/">website</a>.
+**Requirement**: <a href="http://github.com/NuGrid/NuPyCEE">NuPyCEE</a>. The files included in the JINAPyCEE root directory need to be added into the root directory of NuPyCEE.
 
 **Userguides**: Coming soon.
 
