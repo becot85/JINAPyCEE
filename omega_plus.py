@@ -83,7 +83,7 @@ class omega_plus():
                  nsmerger_table = 'yield_tables/r_process_rosswog_2014.txt', \
                  sn1a_table='yield_tables/sn1a_t86.txt', radio_refinement=1, \
                  pop3_table='yield_tables/popIII_heger10.txt', \
-                 hardsetZ=-1, sn1a_on=True, t_nsm_coal=-1.0, \
+                 hardsetZ=-1, sn1a_on=True, t_nsm_coal=-1.0, nb_nsm_per_m=-1,\
                  ns_merger_on=False, f_binary=1.0, f_merger=0.0008, \
                  t_merger_max=1.0e10, m_ej_nsm = 2.5e-02, iniabu_table='', \
                  imf_bdys_pop3=[0.1,100], imf_yields_range_pop3=[10,30], \
@@ -91,7 +91,7 @@ class omega_plus():
                  nb_1a_per_m=1.0e-3, t_merge=-1.0, imf_yields_range=[1,30], \
                  exclude_masses=[], skip_zero=False, eta_norm=-1, redshift_f=0.0, \
                  print_off=False, long_range_ref=False, calc_SSP_ej=False, \
-                 input_yields=False, popIII_on=True, t_sf_z_dep=1.0, m_crit_on=False, \
+                 input_yields=False, popIII_info_fast=True, t_sf_z_dep=1.0, m_crit_on=False, \
                  norm_crit_m=8.0e+09, mass_frac_SSP=0.5, imf_rnd_sampling=False, \
                  halo_in_out_on=True, pre_calculate_SSPs=False, m_outer_ini=-1.0, \
                  epsilon_sne_halo=-1, nb_ccsne_per_m=0.01, epsilon_sne_gal=-1, \
@@ -100,7 +100,7 @@ class omega_plus():
                  DM_outflow_C17=False, m_cold_flow_tresh=-1, C17_eta_z_dep=True, \
                  Grackle_on=False, f_t_ff=1.0, t_inflow=-1.0, t_ff_index=1.0, \
                  delayed_extra_log_radio=False, delayed_extra_yields_log_int_radio=False, \
-                 r_vir_array=np.array([]),\
+                 r_vir_array=np.array([]), nsm_dtd_power=np.array([]), \
                  dt_in_SSPs=np.array([]), SSPs_in=np.array([]), is_SF_t=np.array([]), \
                  DM_array=np.array([]), ism_ini=np.array([]), ism_ini_radio=np.array([]), \
                  mdot_ini=np.array([]), mdot_ini_t=np.array([]), ytables_in=np.array([]), \
@@ -121,23 +121,29 @@ class omega_plus():
                  delayed_extra_yields_norm_radio=np.array([]), \
                  ytables_radio_in=np.array([]), radio_iso_in=np.array([]), \
                  ytables_1a_radio_in=np.array([]), ytables_nsmerger_radio_in=np.array([]),\
-                 test_clayton=np.array([]), exp_infall=np.array([])):
+                 test_clayton=np.array([]), exp_infall=np.array([]), m_inflow_in=np.array([])):
 
 
         # Announce the beginning of the simulation 
-        print ('OMEGA SAM run in progress..')
+        print ('OMEGA+ run in progress..')
         start_time = t_module.time()
         self.start_time = start_time
+
+        # Set the initial mass of the inner reservoir
+        if mgal > 0.0:
+            the_mgal = mgal
+        else:
+            the_mgal = 1.0
 
         # Declare the inner region (OMEGA instance)
         self.inner = omega.omega(in_out_control=True, SF_law=False, DM_evolution=False, \
             sfe=sfe, t_star=t_star, mass_loading=mass_loading, external_control=True, \
             Z_trans=Z_trans, imf_type=imf_type, alphaimf=alphaimf, imf_bdys=imf_bdys, \
             sn1a_rate=sn1a_rate, iniZ=iniZ, dt=dt, special_timesteps=special_timesteps, \
-            tend=tend, mgal=1.0, transitionmass=transitionmass, table=table, \
+            tend=tend, mgal=the_mgal, transitionmass=transitionmass, table=table, \
             sn1a_on=sn1a_on, sn1a_table=sn1a_table, ns_merger_on=ns_merger_on, \
             table_radio=table_radio, decay_file=decay_file,\
-            sn1a_table_radio=sn1a_table_radio, \
+            sn1a_table_radio=sn1a_table_radio, nb_nsm_per_m=nb_nsm_per_m,\
             bhnsmerger_table_radio=bhnsmerger_table_radio,\
             nsmerger_table_radio=nsmerger_table_radio, ism_ini_radio=ism_ini_radio,\
             f_binary=f_binary, f_merger=f_merger, t_merger_max=t_merger_max, \
@@ -148,7 +154,7 @@ class omega_plus():
             gauss_dtd=gauss_dtd, exp_dtd=exp_dtd, nb_1a_per_m=nb_1a_per_m, t_merge=t_merge, \
             imf_yields_range=imf_yields_range, exclude_masses=exclude_masses, \
             skip_zero=skip_zero, redshift_f=redshift_f, print_off=print_off, \
-            calc_SSP_ej=calc_SSP_ej, input_yields=input_yields, popIII_on=popIII_on, \
+            calc_SSP_ej=calc_SSP_ej, input_yields=input_yields, popIII_info_fast=popIII_info_fast, \
             t_sf_z_dep=t_sf_z_dep, mass_frac_SSP=mass_frac_SSP, t_nsm_coal=t_nsm_coal, \
             imf_rnd_sampling=imf_rnd_sampling, ism_ini=ism_ini, mdot_ini=mdot_ini, \
             mdot_ini_t=mdot_ini_t, ytables_in=ytables_in, DM_array=DM_array, \
@@ -170,9 +176,10 @@ class omega_plus():
             ytables_radio_in=ytables_radio_in, radio_iso_in=radio_iso_in,\
             ytables_1a_radio_in=ytables_1a_radio_in,\
             ytables_nsmerger_radio_in=ytables_nsmerger_radio_in,\
-            test_clayton=test_clayton, radio_refinement=radio_refinement)
+            test_clayton=test_clayton, radio_refinement=radio_refinement,\
+            nsm_dtd_power=nsm_dtd_power)
 
-        # Parameters associated with OMEGA SAM
+        # Parameters associated with OMEGA+
         self.m_outer_ini = m_outer_ini
         self.outer_ini_f = outer_ini_f
         self.ymgal_outer_ini = ymgal_outer_ini
@@ -205,6 +212,8 @@ class omega_plus():
         self.t_ff_index = t_ff_index
         self.exp_infall = exp_infall
         self.nb_exp_infall = len(exp_infall)
+        self.m_inflow_in = m_inflow_in
+        self.len_m_inflow_in = len(m_inflow_in)
 
         # If the dark matter mass is constant ..
         if len(DM_array) == 0:
@@ -310,7 +319,7 @@ class omega_plus():
         #    del self.my_chemistry
 
         # Announce the end of the simulation
-        print ('   OMEGA SAM run completed -',self.__get_time())
+        print ('   OMEGA+ run completed -',self.__get_time())
 
 
     ##############################################
@@ -929,6 +938,22 @@ class omega_plus():
                 cooling_rate += self.exp_infall[i_in][0] * \
                     np.exp(-(self.inner.t - self.exp_infall[i_in][1]) / \
                         self.exp_infall[i_in][2])
+            # Calculate the isotope cooling rates
+            iso_rate_temp = np.zeros(self.inner.nb_isotopes)
+            sum_ymgal_outer_temp = sum(self.ymgal_outer[i_step_OMEGA])
+            if sum_ymgal_outer_temp > 0.0:
+                m_tot_inv = 1.0 / sum_ymgal_outer_temp
+                for j_gir in range(0,self.inner.nb_isotopes):
+                    iso_rate_temp[j_gir] = cooling_rate * m_tot_inv * \
+                       self.ymgal_outer[i_step_OMEGA][j_gir]
+
+            # Return the inflow rate of all isotopes
+            return np.array(iso_rate_temp)
+
+          # If an input inflow mass is provided ..
+          elif self.len_m_inflow_in > 0:
+            cooling_rate = self.m_inflow_in[i_step_OMEGA]/\
+                           self.inner.history.timesteps[i_step_OMEGA]
             # Calculate the isotope cooling rates
             iso_rate_temp = np.zeros(self.inner.nb_isotopes)
             sum_ymgal_outer_temp = sum(self.ymgal_outer[i_step_OMEGA])
