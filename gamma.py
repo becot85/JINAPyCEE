@@ -1,4 +1,5 @@
-from __future__ import print_function
+from __future__ import (division, print_function, absolute_import,
+                        unicode_literals)
 
 '''
 
@@ -25,9 +26,14 @@ Each branch is represented by an OMEGA_SAM or OMEGA simulation:
 '''
 
 # Import the OMEGA module
-import omega
-import omega_plus
-import read_yields as ry
+try:
+    from NuPyCEE import omega
+    from NuPyCEE import omega_plus
+    from NuPyCEE import read_yields as ry
+except ValueError:
+    import omega
+    import omega_plus
+    import read_yields as ry
 
 # Standard packages
 import numpy as np
