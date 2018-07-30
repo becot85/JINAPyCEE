@@ -16,9 +16,12 @@ This repository contains a series of multi-zone galactic chemical evolution code
 - Semi-analytic code following the mass assembly of galaxies based on merger trees provided by cosmological simulations.
 - Evolution of each building-block galaxy (each branch of the merger tree) calculated by OMEGA+, a code part of JINAPyCEE.
 
-**Requirement**: <a href="http://github.com/NuGrid/NuPyCEE">NuPyCEE</a>. The files included in the JINAPyCEE root directory need to be added into the root directory of NuPyCEE.
+**Requirement**
 
-**Userguides**: Coming soon.
+* <a href="http://github.com/NuGrid/NuPyCEE">NuPyCEE</a>. The files included in the JINAPyCEE root directory need to be added into the root directory of NuPyCEE.
+* <a href="https://ytree.readthedocs.io/en/latest/">ytree</a> in order to read consistent-tree files.
+
+**Userguides**: See the DOC directory.
 
 **Acknowledgments**: Please cite the references stated above when using codes from this repository.
 

@@ -35,3 +35,13 @@ GAMMA
 	Definition of the input arrays.  How to run the code.
 	
 	GAMMA_introduction.ipynb
+	
+	
+Merger Trees
+============
+
+**Reformatting Merger Trees for GAMMA**
+
+	Extract input arrays for GAMMA from merger-tree files.
+	
+	Reformatting_merger_trees.ipynb
