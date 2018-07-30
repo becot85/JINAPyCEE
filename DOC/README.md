@@ -23,4 +23,9 @@ OMEGA+
 	
 GAMMA
 =====
- .. coming soon ..
+
+**Introduction**
+
+	Definition of the input arrays.  How to run the code.
+	
+	GAMMA_introduction.ipynb
