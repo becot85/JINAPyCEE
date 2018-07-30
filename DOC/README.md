@@ -13,6 +13,12 @@ OMEGA+
 	Controlling the inflow rate as a function of time.
 	
 	OMEGA+_defining_gas_inflow.ipynb
+	
+**Defining Gas Outflows (Galactic)**
+
+	Controlling the outflow rate from the central galaxy.
+	
+	OMEGA+_defining_gas_outflow_galactic.ipynb
 
 **Oscillation in the Star Formation History**
 	
