@@ -1,14 +1,9 @@
 '''
 
-GCE OMEGA (One-zone Model for the Evolution of Galaxies) module
+Script to extract information from a consistent tree for 
+generating the input arrays used in GAMMA.
 
-
-Functionality
-=============
-
-This tool allows one to simulate the chemical evolution of single-zone galaxies.
-Having the star formation history as one of the input parameters, OMEGA can
-target local 
+BCOTE: July 2018
 
 '''
 
