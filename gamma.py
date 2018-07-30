@@ -77,7 +77,7 @@ class gamma():
                  t_merge=-1.0, imf_yields_range=[1,30], exclude_masses=[], \
                  skip_zero=False, redshift_f=0.0, print_off=False, \
                  long_range_ref=False, calc_SSP_ej=False, input_yields=False, \
-                 popIII_on=True, t_sf_z_dep = 1.0, m_crit_on=False, norm_crit_m=8.0e+09, \
+                 popIII_info_fast=True, t_sf_z_dep = 1.0, m_crit_on=False, norm_crit_m=8.0e+09, \
                  mass_frac_SSP=0.5, imf_rnd_sampling=False, cte_m_gas = -1.0, \
                  omega_dur=-1.0, tree_trunk_ID=-1, halo_in_out_on=True, \
                  pre_calculate_SSPs=False, gal_out_index=1.0, \
@@ -170,7 +170,7 @@ class gamma():
         self.long_range_ref = long_range_ref
         self.calc_SSP_ej = calc_SSP_ej
         self.input_yields = input_yields
-        self.popIII_on = popIII_on
+        self.popIII_info_fast = popIII_info_fast
         self.t_sf_z_dep = t_sf_z_dep
         self.m_crit_on = m_crit_on
         self.norm_crit_m = norm_crit_m
@@ -671,7 +671,7 @@ class gamma():
             print_off=self.print_off, long_range_ref=self.long_range_ref,\
             calc_SSP_ej=self.calc_SSP_ej, input_yields=True, \
             gal_out_index=self.gal_out_index, f_halo_to_gal_out=self.f_halo_to_gal_out, \
-            popIII_on=self.popIII_on, t_sf_z_dep=self.t_sf_z_dep, \
+            popIII_info_fast=self.popIII_info_fast, t_sf_z_dep=self.t_sf_z_dep, \
             m_crit_on=self.m_crit_on, norm_crit_m=self.norm_crit_m,\
             t_nsm_coal=self.t_nsm_coal, imf_rnd_sampling=self.imf_rnd_sampling,\
             DM_array=self.DM_array, ism_ini=self.ism_ini, mdot_ini=self.mdot_ini, \
