@@ -125,7 +125,8 @@ class omega_plus():
 
 
         # Announce the beginning of the simulation 
-        print ('OMEGA+ run in progress..')
+        if not print_off:
+            print ('OMEGA+ run in progress..')
         start_time = t_module.time()
         self.start_time = start_time
 
@@ -319,7 +320,8 @@ class omega_plus():
         #    del self.my_chemistry
 
         # Announce the end of the simulation
-        print ('   OMEGA+ run completed -',self.__get_time())
+        if not print_off:
+            print ('   OMEGA+ run completed -',self.__get_time())
 
 
     ##############################################

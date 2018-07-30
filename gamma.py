@@ -267,9 +267,10 @@ class gamma():
         '''
 
         # Run an OMEGA simulation in order to copy basic arrays
-        print ('Should add the r-process tables, extra_yields_table, etc...')
+        #print ('Should add the r-process tables, extra_yields_table, etc...')
         self.o_ini = omega.omega(table=self.table, pop3_table=self.pop3_table,\
-                                 special_timesteps=2, cte_sfr=0.0, mgal=1e10)
+                                 special_timesteps=2, cte_sfr=0.0, mgal=1e10,\
+                                 print_off=self.print_off)
 
         # Calculate the number of redshifts
         self.nb_redshifts = len(self.redshifts)
