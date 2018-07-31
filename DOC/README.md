@@ -8,6 +8,12 @@ to access the ipython notebooks introduced below.
 OMEGA+ 
 =====
 
+**Introduction**
+
+	General introduction on how to run the code.
+	
+	OMEGA+_introduction.ipynb
+
 **Defining Gas Inflows**
 
 	Controlling the inflow rate as a function of time.
