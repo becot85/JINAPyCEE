@@ -87,7 +87,7 @@ def convert_tree(hid, lx, Mpeakmin):
             
             ## This gets the scale factors etc for Caterpillar
             snaps = np.unique(tree["snap"])
-            times = haloutils.get_t_snap(hpath,snaps)
+            times = haloutils.get_t_snap(hpath,snaps)*1e9 #Gyr
             redshifts = haloutils.get_z_snap(hpath,snaps)
             ## Convert some things to lists for list.index() method
             snaps = list(snaps)
@@ -151,23 +151,27 @@ def convert_tree(hid, lx, Mpeakmin):
                     
                     # If it is not the root, loop down the tree and add to this branch
                     if irow != 0:
+                        # First descendant
                         desc_irow = tree.getDesc(irow, desc_map)
-                        if desc_irow is None:
-                            raise ValueError("row {} does not have a descendant but should!".format(irow))
+                        if desc_irow is None: raise ValueError("row {} does not have a descendant but should!".format(irow))
                         desc_row = tree[desc_irow]
-                        # While the descendent is not the product of a merger ..
+                        i_z_cur = snaps.index(desc_row["snap"])
+                        fill_branch_info(br_halo_ID, br_age, br_z, br_m_halo, br_r_vir, 
+                                         desc_row["id"], i_z, i_z_cur, times, redshifts, desc_row)
                         if desc_irow == 0: break
+                        # Loop down to further descendants
                         while desc_row["num_prog"] < 2:
-                            i_z_cur = snaps.index(desc_row["snap"])
-                            fill_branch_info(br_halo_ID, br_age, br_z, br_m_halo, br_r_vir, 
-                                             desc_row["id"], i_z, i_z_cur, times, redshifts, desc_row)
                             # Go down the tree
                             desc_irow = tree.getDesc(desc_irow, desc_map)
                             if desc_irow is None:
                                 raise ValueError("row {} does not have a descendant but should!".format(irow))
+                            desc_row = tree[desc_irow]
+                            # Fill in branch data
+                            i_z_cur = snaps.index(desc_row["snap"])
+                            fill_branch_info(br_halo_ID, br_age, br_z, br_m_halo, br_r_vir, 
+                                             desc_row["id"], i_z, i_z_cur, times, redshifts, desc_row)
                             # Stop if this is the root
                             if desc_irow == 0: break
-                            desc_row = tree[desc_irow]
                         # Calculate the time before merger
                         i_z_last = snaps.index(desc_row["snap"])
                         br_t_merge[i_z][-1] = times[i_z_last] - times[i_z]
@@ -193,10 +197,11 @@ def convert_tree(hid, lx, Mpeakmin):
 if __name__=="__main__":
     hids = [1725272, 1387186, 5320]
     lxs = [11, 12, 13, 14]
-    hids = [1725272]
-    hids = [1387186,5320]
-    #lxs = [12]
-    Mpeakmin = 1e9
+    lxs = [11, 12]
+    #hids = [1725272]
+    #hids = [1387186,5320]
+    lxs = [13,14]
+    Mpeakmin = 1e8
     for lx in lxs:
         for hid in hids:
             convert_tree(hid, lx, Mpeakmin)
