@@ -51,3 +51,13 @@ Merger Trees
 	Extract input arrays for GAMMA from merger-tree files.
 	
 	Reformatting_merger_trees.ipynb
+	
+	
+Multi-Zone Models
+=================
+
+**Creating Multi-Zone Models**
+
+	Introduction on how to connect multiple OMEGAs together.
+	
+	Creating_multi_zone_models.ipynb	
