@@ -71,12 +71,12 @@ global_path=global_path+'/'
 class omega_plus():
 
     # Initialisation function
-    def __init__(self, Z_trans=1e-20, f_dyn=0.1, sfe=0.1, \
-                 m_DM_0=1.0e11, mass_loading=1.0, t_star=-1, \
+    def __init__(self, Z_trans=1e-20, f_dyn=0.1, sfe=0.01, \
+                 m_DM_0=1.0e12, mass_loading=1.0, t_star=-1, \
                  z_dependent=True, exp_ml=2.0, imf_type='kroupa', \
                  alphaimf=2.35, imf_bdys=[0.1,100], sn1a_rate='power_law', \
-                 iniZ=0.0, dt=1e6, special_timesteps=30, tend=13e9, \
-                 mgal=-1, transitionmass=8, ini_alpha=True, \
+                 iniZ=0.0, dt=1e6, special_timesteps=60, tend=13e9, \
+                 mgal=1.0, transitionmass=8, ini_alpha=True, \
                  table='yield_tables/agb_and_massive_stars_nugrid_MESAonly_fryer12delay.txt', \
                  table_radio='', decay_file='', sn1a_table_radio='',\
                  bhnsmerger_table_radio='', nsmerger_table_radio='',\
