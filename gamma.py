@@ -101,7 +101,8 @@ class gamma():
                  br_age=np.array([]), br_z=np.array([]), br_t_merge=np.array([]), \
                  br_ID_merge=np.array([]), br_m_halo=np.array([]), br_is_prim=np.array([]),\
                  br_is_SF=np.array([]), sne_L_feedback=np.array([]),\
-                 br_sfe_t=np.array([]), br_sfh=np.array([])):
+                 br_sfe_t=np.array([]), br_sfh=np.array([]),
+                 br_is_sub=np.array([])):
 
         # Check if we have the trunk ID
         if tree_trunk_ID < 0:
@@ -239,6 +240,7 @@ class gamma():
         self.len_br_is_SF_t = len(br_is_SF_t)
         self.len_br_sfh = len(br_sfh)
         self.br_r_vir = br_r_vir
+        self.br_is_sub = br_is_sub
         self.mvir_sf_tresh = mvir_sf_tresh
 
         # Return if inputs not ok
@@ -295,6 +297,12 @@ class gamma():
             global_path+iniabu_table, self.o_ini.history.isotopes)
         self.prim_x_frac = np.array(ytables_bb.get(quantity='Yields'))
         del ytables_bb
+
+        # Define the information of whether branches are sub-halo or not
+        if len(self.br_is_sub) > 0:
+            is_sub_info = True
+        else:
+            is_sub_info = False
 
 
     ##############################################
@@ -385,6 +393,14 @@ class gamma():
             self.r_vir_array[i_cb][0] = self.br_age[i_z_ss][i_br_ss][i_cb]
             self.r_vir_array[i_cb][1] = self.br_r_vir[i_z_ss][i_br_ss][i_cb]
         self.r_vir_array = np.array(self.r_vir_array)
+
+        # Assign whether or not the branch will be a sub-halo at some point
+        self.is_sub_array = np.array([])
+        if is_sub_info:
+            for i_cb in range(0,len(self.br_is_sub[i_z_ss][i_br_ss])):
+                self.is_sub_array.append([0.0]*2)
+                self.is_sub_array[i_cb][0] = self.br_age[i_z_ss][i_br_ss][i_cb]
+                self.is_sub_array[i_cb][1] = self.br_is_sub[i_z_ss][i_br_ss][i_cb]
 
         # Add mass depending on the dark matter mass ratio.
         # This is because the sum of dark matter masses from the progenitors
@@ -610,9 +626,6 @@ class gamma():
         # If we are at the trunk ...
         if self.br_ID_merge[i_z_ss][i_br_ss] == self.tree_trunk_id:
 
-            # Do not send DM_array or sfh_array
-#            self.DM_array = ([])
-
             # No merger
             # The '-1.0' is because i_t_merger in OMEGA needs to 
             # be the last timestep.  The calculation of i_t_merge
@@ -621,7 +634,7 @@ class gamma():
             self.t_merge = self.tend - 1.0
             self.t_merge = -1
 
-        # Assign the branch info 
+        # Define whether the branch will form stars
         if self.len_br_is_SF > 0:
             br_is_SF_temp = self.br_is_SF[i_z_ss][i_br_ss]
         else:
@@ -629,6 +642,9 @@ class gamma():
                 br_is_SF_temp = True
             else:
                 br_is_SF_temp = False
+
+        # Assigned pre-defined star formation timescale
+        # and efficiency .. if provided
         if self.len_br_is_SF_t > 0:
             br_is_SF_t_temp = self.br_is_SF_t[i_z_ss][i_br_ss]
         else:
@@ -641,6 +657,8 @@ class gamma():
                 br_sfe_t_temp = np.array([])    
         else:
             br_sfe_t_temp = np.array([])
+
+        # Assigned pre-defined star formation history .. if provided
         if self.len_br_sfh > 0:
             br_sfh_temp = self.br_sfh[i_z_ss][i_br_ss]
         else:
@@ -693,7 +711,7 @@ class gamma():
             m_cold_flow_tresh=self.m_cold_flow_tresh, C17_eta_z_dep=self.C17_eta_z_dep, \
             r_vir_array=self.r_vir_array, dmo_ini=self.dmo_ini, dmo_ini_t=self.dmo_ini_t, \
             f_t_ff=self.f_t_ff, Grackle_on=self.Grackle_on, t_inflow=self.t_inflow, \
-            t_ff_index=self.t_ff_index)
+            t_ff_index=self.t_ff_index, is_sub_array=self.is_sub_array)
             
 
     ##############################################

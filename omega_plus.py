@@ -122,7 +122,8 @@ class omega_plus():
                  delayed_extra_yields_norm_radio=np.array([]), \
                  ytables_radio_in=np.array([]), radio_iso_in=np.array([]), \
                  ytables_1a_radio_in=np.array([]), ytables_nsmerger_radio_in=np.array([]),\
-                 test_clayton=np.array([]), exp_infall=np.array([]), m_inflow_in=np.array([])):
+                 test_clayton=np.array([]), exp_infall=np.array([]), m_inflow_in=np.array([]),\
+                 is_sub_array=np.array([])):
 
 
         # Announce the beginning of the simulation 
@@ -217,6 +218,17 @@ class omega_plus():
         self.nb_exp_infall = len(exp_infall)
         self.m_inflow_in = m_inflow_in
         self.len_m_inflow_in = len(m_inflow_in)
+        self.is_sub_array = is_sub_array
+
+        # If the sub-halo information is provided ..
+        if len(self.is_sub_array) > 0:
+
+            # Synchonize the timesteps
+            self.__copy_is_sub_input()
+
+        # If the sub-halo information is not provided ..
+        else:
+            self.is_sub = [False]*(self.inner.nb_timesteps+1)
 
         # If the dark matter mass is constant ..
         if len(DM_array) == 0:
@@ -1147,6 +1159,12 @@ class omega_plus():
         # Eject mass from the halo into the intergalactic medium
         self.__eject_halo(i_step_OMEGA)
 
+        # If the halo is a sub-halo ..
+        if self.is_sub[i_step_OMEGA]:
+
+            # Remove all the gas of inside the CGM
+            self.ymgal_outer[i_step_OMEGA+1] *= 0.0
+
         # Calculate the total gas mass of the outer region
         self.sum_ymgal_outer[i_step_OMEGA+1] = sum(self.ymgal_outer[i_step_OMEGA+1])
 
@@ -1185,7 +1203,7 @@ class omega_plus():
             self.ymgal_outer[i_step_OMEGA+1] *= f_keep
 
         # If gas needs to be added ..
-        else:
+        elif not self.is_sub[i_step_OMEGA]:
 
             # Calculate the mass added in the outer gas
             dm_m_outer = dm_dm * self.f_b_temp
@@ -1365,6 +1383,47 @@ class omega_plus():
 
         # Calculate the metallicity of the outer region
         self.__calculate_outer_Z(i_step_OMEGA+1)
+
+
+    ##############################################
+    #             Copy Is Sub Input              #
+    ##############################################
+    def __copy_is_sub_input(self):
+
+        # Declare the boolean array saying whether the halo is a sub-halo
+        self.is_sub = [False]*(self.inner.nb_timesteps+1)
+
+        # Variable to keep track of the OMEGA's timestep
+        i_dt_csa = 0
+        t_csa = 0.0
+        nb_dt_csa = self.inner.nb_timesteps
+
+        # For every timestep given in the array
+        for i_csa in range(1,len(self.is_sub_array)):
+
+            # While we stay in the same time bin ...
+            while t_csa <= self.is_sub_array[i_csa][0]:
+
+                # Assign the input value
+                self.is_sub[i_dt_csa] = self.is_sub_array[i_csa-1][1]
+
+                # Exit the loop if the array is full
+                if i_dt_csa >= nb_dt_csa:
+                    break
+
+                # Calculate the new time
+                t_csa += self.inner.history.timesteps[i_dt_csa]
+                i_dt_csa += 1
+
+            # Exit the loop if the array is full
+            if i_dt_csa >= nb_dt_csa:
+                break
+
+        # If the array has been read completely, but the OMEGA+ array is
+        # not full, fil the rest of the array with the last input value
+        while i_dt_csa < nb_dt_csa+1:
+            self.is_sub[i_dt_csa] = self.is_sub_array[-1][1]
+            i_dt_csa += 1
 
 
     ##############################################
