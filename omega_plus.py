@@ -1,4 +1,5 @@
-from __future__ import print_function
+from __future__ import (division, print_function, absolute_import,
+                        unicode_literals)
 
 '''
 
@@ -30,8 +31,6 @@ The inner region is represented by an OMEGA simulation:
 
 '''
 
-# Import the OMEGA module
-import omega
 
 # Standard packages
 import numpy as np
@@ -44,7 +43,13 @@ import os
 import re
 
 # Import the class that reads the input yield tables
-import read_yields as ry
+try:
+    from NuPyCEE import read_yields as ry
+    # Import the OMEGA module
+    from NuPyCEE import omega
+except ValueError:
+    import read_yields as ry
+    import omega
 
 # Import modules for Grackle (gas cooling)
 #import yt
