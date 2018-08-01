@@ -111,46 +111,34 @@ def convert_tree(hpath, tree, treeoutputpath, verbose=True):
         ## Assign whether or not this is a primordial branch
         br_is_prim[i_z].append(row["num_prog"] == 0)
         
-        # Fill the halo ID, age, mass, and radius
+        ## Fill the start of the branch
+        ## Fill the halo ID, age, mass, and radius
         # Note: the ID is the mtid!!! not sure if this is what we actually want
         # To access that object in the halo catalogs, we need origid and snapshot
         fill_branch_info(br_halo_ID, br_age, br_z, br_m_halo, br_r_vir, 
                          row["id"], i_z, i_z, times, redshifts, row, br_is_sub)
         num_nodes_processed += 1
-        
-        # If it is not the root, traverse down the tree and add to this branch
-        if irow != 0:
-            # First descendant
-            desc_irow = tree.getDesc(irow, desc_map)
-            if desc_irow is None:
-                continue
-                #raise ValueError("row {} does not have a descendant but should!".format(irow))
-            desc_row = tree[desc_irow]
+        ## Step down the tree
+        desc_irow = tree.getDesc(irow, desc_map)
+        if desc_irow is None: continue # reached the root
+        desc_row = tree[desc_irow]
+        ## Loop through subsequent parts of the branch, defined as single-progenitor
+        while desc_row["num_prog"] == 1:
+            ## Fill next part of the branch
             i_z_cur = snaps.index(desc_row["snap"])
             fill_branch_info(br_halo_ID, br_age, br_z, br_m_halo, br_r_vir, 
-                             desc_row["id"], i_z, i_z_cur, times, redshifts, desc_row,
-                             br_is_sub)
+                             desc_row["id"], i_z, i_z_cur, times, redshifts, desc_row, br_is_sub)
             num_nodes_processed += 1
-            
-            # Loop down to further descendants
-            while desc_row["num_prog"] < 2:
-                # Go down the tree
-                desc_irow = tree.getDesc(desc_irow, desc_map)
-                if desc_irow is None:
-                    break
-                    #raise ValueError("row {} does not have a descendant but should!".format(irow))
-                desc_row = tree[desc_irow]
-                # Fill in branch data
-                i_z_cur = snaps.index(desc_row["snap"])
-                fill_branch_info(br_halo_ID, br_age, br_z, br_m_halo, br_r_vir, 
-                                 desc_row["id"], i_z, i_z_cur, times, redshifts, desc_row,
-                                 br_is_sub)
-                num_nodes_processed += 1
-            # Calculate the time before merger
-            i_z_last = snaps.index(desc_row["snap"])
-            br_t_merge[i_z][-1] = times[i_z_last] - times[i_z]
-            # Copy the last halo ID (when the branch has merged)
-            br_ID_merge[i_z][-1] = desc_row["id"]
+            ## Step down the tree
+            desc_irow = tree.getDesc(desc_irow, desc_map)
+            if desc_irow is None: break # reached the root
+            desc_row = tree[desc_irow]
+                
+        # Calculate the time before merger
+        i_z_last = snaps.index(desc_row["snap"])
+        br_t_merge[i_z][-1] = times[i_z_last] - times[i_z]
+        # Copy the last halo ID (when the branch has merged)
+        br_ID_merge[i_z][-1] = desc_row["id"]
     if verbose: print "  Time to convert: {:.1f}".format(time.time()-start); sys.stdout.flush()
     if num_nodes_processed != num_nodes_in_tree:
         raise ValueError("ERROR! num nodes processed != num nodes in tree ({} != {})".format(num_nodes_processed, num_nodes_in_tree))
