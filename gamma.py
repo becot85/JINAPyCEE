@@ -306,9 +306,9 @@ class gamma():
 
         # Define the information of whether branches are sub-halo or not
         if len(self.br_is_sub) > 0:
-            is_sub_info = True
+            self.is_sub_info = True
         else:
-            is_sub_info = False
+            self.is_sub_info = False
 
 
     ##############################################
@@ -402,7 +402,7 @@ class gamma():
 
         # Assign whether or not the branch will be a sub-halo at some point
         self.is_sub_array = np.array([])
-        if is_sub_info:
+        if self.is_sub_info:
             for i_cb in range(0,len(self.br_is_sub[i_z_ss][i_br_ss])):
                 self.is_sub_array.append([0.0]*2)
                 self.is_sub_array[i_cb][0] = self.br_age[i_z_ss][i_br_ss][i_cb]
