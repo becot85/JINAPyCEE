@@ -32,6 +32,12 @@ OMEGA+
 
 	OMEGA+_oscillating_star_formation.ipynb
 	
+**List of Parameters**
+	
+	List of parameters to deal with gas circulation processes.
+
+	OMEGA+_list_of_parameters.html
+	
 	
 GAMMA
 =====
