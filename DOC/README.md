@@ -36,7 +36,7 @@ OMEGA+
 	
 	List of parameters to deal with gas circulation processes.
 
-	OMEGA+_list_of_parameters.html
+	OMEGA+_list_of_parameters.ipynb
 	
 	
 GAMMA
