@@ -468,7 +468,7 @@ class gamma():
 
             # Make sure not to remove more than available
             if f_keep_temp < 0.0:
-                if sum(self.ymgal_outer_ini) < abs(dm_added):
+                if np.sum(self.ymgal_outer_ini) < abs(dm_added):
                     print ('OH GOD', f_keep_temp)
                     f_keep_temp = 0.0
 
@@ -541,7 +541,7 @@ class gamma():
             # Combine the outer gas
             outer += self.galaxy_inst[iz][ibr].ymgal_outer[\
                self.galaxy_inst[iz][ibr].inner.i_t_merger+1]
-            #if sum(self.galaxy_inst[iz][ibr].inner.history.m_locked) <= 0.0:
+            #if np.sum(self.galaxy_inst[iz][ibr].inner.history.m_locked) <= 0.0:
             #    ism += self.galaxy_inst[iz][ibr].ymgal_outer[\
             #       self.galaxy_inst[iz][ibr].inner.i_t_merger+1]
             #else:

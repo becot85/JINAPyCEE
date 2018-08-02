@@ -527,7 +527,7 @@ class omega_plus():
 
         # Declare the total mass array
         self.sum_ymgal_outer = [0.0] * (self.inner.nb_timesteps+1)
-        self.sum_ymgal_outer[0] = sum(self.ymgal_outer[0])
+        self.sum_ymgal_outer[0] = np.sum(self.ymgal_outer[0])
 
         # Declare the metallicity array
         self.outer_Z = [0.0]*(self.inner.nb_timesteps+1)
@@ -727,7 +727,7 @@ class omega_plus():
         for i_step_OMEGA in range(0,i_up_temp):
 
             # Calculate the total current gas mass in the inner region
-            self.sum_inner_ymgal_cur = sum(self.inner.ymgal[i_step_OMEGA])
+            self.sum_inner_ymgal_cur = np.sum(self.inner.ymgal[i_step_OMEGA])
 
             # Calculate the star formation rate [Msun/yr]
             sfr_temp = self.__get_SFR(i_step_OMEGA)
@@ -737,12 +737,12 @@ class omega_plus():
 
             # Calculate the galactic inflow rate [Msun/yr] for all isotopes
             ir_iso_temp = self.__get_inflow_rate(i_step_OMEGA)
-            #ir_iso_temp[-1] = 2.0e-3 * sum(ir_iso_temp)
+            #ir_iso_temp[-1] = 2.0e-3 * np.sum(ir_iso_temp)
 
             # Convert rates into total masses (except for SFR)
             m_lost = or_temp * self.inner.history.timesteps[i_step_OMEGA]
             m_added = ir_iso_temp *  self.inner.history.timesteps[i_step_OMEGA]
-            sum_m_added = sum(m_added)
+            sum_m_added = np.sum(m_added)
             if self.f_halo_to_gal_out >= 0.0:
                 self.m_lost_for_halo = copy.deepcopy(m_lost)
 
@@ -751,7 +751,7 @@ class omega_plus():
             self.inner.m_inflow_t[i_step_OMEGA] = sum_m_added
 
             # Limit the inflow rate if needed (the outflow rate is considered in OMEGA)
-            if sum_m_added > sum(self.ymgal_outer[i_step_OMEGA]):
+            if sum_m_added > np.sum(self.ymgal_outer[i_step_OMEGA]):
                 m_added = copy.deepcopy(self.ymgal_outer[i_step_OMEGA])
 
             # If the IMF must be sampled ...
@@ -950,7 +950,7 @@ class omega_plus():
         '''
 
         # If this is a star forming galaxy ..
-        if self.is_SF and sum(self.ymgal_outer[i_step_OMEGA]) > 0.0:
+        if self.is_SF and np.sum(self.ymgal_outer[i_step_OMEGA]) > 0.0:
 
           # If input exponential infall laws ..
           # For each infall episode, exp_infall --> [Norm, t_max, timescale]
@@ -962,7 +962,7 @@ class omega_plus():
                         self.exp_infall[i_in][2])
             # Calculate the isotope cooling rates
             iso_rate_temp = np.zeros(self.inner.nb_isotopes)
-            sum_ymgal_outer_temp = sum(self.ymgal_outer[i_step_OMEGA])
+            sum_ymgal_outer_temp = np.sum(self.ymgal_outer[i_step_OMEGA])
             if sum_ymgal_outer_temp > 0.0:
                 m_tot_inv = 1.0 / sum_ymgal_outer_temp
                 for j_gir in range(0,self.inner.nb_isotopes):
@@ -978,7 +978,7 @@ class omega_plus():
                            self.inner.history.timesteps[i_step_OMEGA]
             # Calculate the isotope cooling rates
             iso_rate_temp = np.zeros(self.inner.nb_isotopes)
-            sum_ymgal_outer_temp = sum(self.ymgal_outer[i_step_OMEGA])
+            sum_ymgal_outer_temp = np.sum(self.ymgal_outer[i_step_OMEGA])
             if sum_ymgal_outer_temp > 0.0:
                 m_tot_inv = 1.0 / sum_ymgal_outer_temp
                 for j_gir in range(0,self.inner.nb_isotopes):
@@ -1024,7 +1024,7 @@ class omega_plus():
 #                        density=self.rho_500_t[i_step_OMEGA], \
 #                            metal_mass_fraction=self.outer_Z[i_step_OMEGA], converge=True)
 # !! IF I use average halo gas density [g cm-3]
-#                av_density = sum(self.ymgal_outer[i_step_OMEGA]) * 2.83489281e-31 / \
+#                av_density = np.sum(self.ymgal_outer[i_step_OMEGA]) * 2.83489281e-31 / \
 #                              self.inner.r_vir_DM_t[i_step_OMEGA]**3
 #                fc = setup_fluid_container(self.my_chemistry, \
 #                    temperature=self.T_vir_t[i_step_OMEGA], \
@@ -1067,7 +1067,7 @@ class omega_plus():
                 self.t_cool[i_step_OMEGA] = copy.deepcopy(cooling_time)
 
             # Get the total mass of the halo gas
-            sum_ymgal_outer_temp = sum(self.ymgal_outer[i_step_OMEGA])
+            sum_ymgal_outer_temp = np.sum(self.ymgal_outer[i_step_OMEGA])
 
             # Calculate the total cooling rate [Msun/yr]
             cooling_rate = sum_ymgal_outer_temp / cooling_time
@@ -1128,7 +1128,7 @@ class omega_plus():
         '''
 
         # Convert the m_added total mass into individual isotopes .. if needed
-        sum_ymgal_outer_temp =  sum(self.ymgal_outer[i_step_OMEGA])
+        sum_ymgal_outer_temp =  np.sum(self.ymgal_outer[i_step_OMEGA])
         if type(m_added) == float:
             if sum_ymgal_outer_temp <= 0.0:
                 f_added = 0.0
@@ -1142,12 +1142,12 @@ class omega_plus():
 
         # Remove gas from the outer region (modify the state of the next timestep)
         self.ymgal_outer[i_step_OMEGA+1] = self.ymgal_outer[i_step_OMEGA] - m_added
-        if sum(self.ymgal_outer[i_step_OMEGA+1]) < 0.0:
+        if np.sum(self.ymgal_outer[i_step_OMEGA+1]) < 0.0:
             self.ymgal_outer[i_step_OMEGA+1] *= 0.0
 
         # Calculate the mass fraction of each isotopes that will be added to the
         # outer region, relative to the total mass of the inner at dt+1
-        sum_inner_ymgal_temp = sum(self.inner.ymgal[i_step_OMEGA+1])
+        sum_inner_ymgal_temp = np.sum(self.inner.ymgal[i_step_OMEGA+1])
         if sum_inner_ymgal_temp > 0.0:
 
             # Add gas added in the outer region (lost by the inner)
@@ -1171,7 +1171,7 @@ class omega_plus():
             self.ymgal_outer[i_step_OMEGA+1] *= 0.0
 
         # Calculate the total gas mass of the outer region
-        self.sum_ymgal_outer[i_step_OMEGA+1] = sum(self.ymgal_outer[i_step_OMEGA+1])
+        self.sum_ymgal_outer[i_step_OMEGA+1] = np.sum(self.ymgal_outer[i_step_OMEGA+1])
 
         # Calculate the metallicity of the outer region
         self.__calculate_outer_Z(i_step_OMEGA+1)
@@ -1220,7 +1220,7 @@ class omega_plus():
             iso_add = self.prim_x_frac * dm_m_outer
             if self.inner.m_DM_t[i_step_OMEGA] > self.m_cold_flow_tresh:
                 self.ymgal_outer[i_step_OMEGA+1] += iso_add
-                #sum_temp = sum(self.ymgal_outer[i_step_OMEGA+1])
+                #sum_temp = np.sum(self.ymgal_outer[i_step_OMEGA+1])
                 #f_temp = (dm_m_outer + sum_temp) / sum_temp
                 #self.ymgal_outer[i_step_OMEGA+1] *= f_temp
             else:
@@ -1259,12 +1259,12 @@ class omega_plus():
 
         # Remove the mass from the halo (make sure to limit the mass ejected)
         if m_lost > 0.0:
-            if m_lost > sum(self.ymgal_outer[i_step_OMEGA+1]):
+            if m_lost > np.sum(self.ymgal_outer[i_step_OMEGA+1]):
                 if not self.inner.print_off:
                     print ('Halo outflow empties the halo!!')
                 self.ymgal_outer[i_step_OMEGA+1] *= 0.0
             else:
-                f_remnant = 1.0 - m_lost/sum(self.ymgal_outer[i_step_OMEGA+1])
+                f_remnant = 1.0 - m_lost/np.sum(self.ymgal_outer[i_step_OMEGA+1])
                 self.ymgal_outer[i_step_OMEGA+1] *= f_remnant
 
         # Keep the mass loss in memory
@@ -1320,7 +1320,7 @@ class omega_plus():
         '''
 
         # Calculate the total current gas mass in the inner region
-        self.sum_inner_ymgal_cur = sum(self.inner.ymgal[i_step_OMEGA+1])
+        self.sum_inner_ymgal_cur = np.sum(self.inner.ymgal[i_step_OMEGA+1])
 
         # Get the SFR of the next timestep if no gas is added
         sfr_next = self.__get_SFR(i_step_OMEGA+1)
@@ -1359,7 +1359,7 @@ class omega_plus():
                 m_add_temp = (ratio_SFR - 1) * self.sum_inner_ymgal_cur
 
             # Calculate the total gas mass in the halo
-            m_gas_halo_temp = sum(self.ymgal_outer[i_step_OMEGA+1])
+            m_gas_halo_temp = np.sum(self.ymgal_outer[i_step_OMEGA+1])
 
             # If enough gas is in the halo ..
             if m_add_temp <= m_gas_halo_temp:
@@ -1384,7 +1384,7 @@ class omega_plus():
                 self.inner.ymgal[i_step_OMEGA+1] += m_add_prim_temp * self.prim_x_frac
 
         # Calculate the total gas mass of the outer region
-        self.sum_ymgal_outer[i_step_OMEGA+1] = sum(self.ymgal_outer[i_step_OMEGA+1])
+        self.sum_ymgal_outer[i_step_OMEGA+1] = np.sum(self.ymgal_outer[i_step_OMEGA+1])
 
         # Calculate the metallicity of the outer region
         self.__calculate_outer_Z(i_step_OMEGA+1)
