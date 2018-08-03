@@ -38,6 +38,12 @@ OMEGA+
 
 	OMEGA+_list_of_parameters.ipynb
 	
+**Simple Milky Way Model**
+	
+	Parameters for creating a simple Milky Way model.
+
+	OMEGA+_Milky_Way_model.ipynb
+	
 	
 GAMMA
 =====
