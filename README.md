@@ -18,11 +18,27 @@ This repository contains a series of multi-zone galactic chemical evolution code
 
 **Requirement**
 
-* <a href="http://github.com/NuGrid/NuPyCEE">NuPyCEE</a>. The files included in the JINAPyCEE root directory need to be added into the root directory of NuPyCEE.
-* <a href="https://ytree.readthedocs.io/en/latest/">ytree</a> in order to read consistent-tree files.
+* <a href="http://github.com/NuGrid/NuPyCEE">NuPyCEE</a> to access the chemical evolution functions.
+* <a href="https://ytree.readthedocs.io/en/latest/">ytree</a> if you want to read consistent-tree files for GAMMA.
 
 **Userguides**: See the DOC directory.
 
 **Acknowledgments**: Please cite the references stated above when using codes from this repository.
 
 If you have questions, comments, or want to report a problem, please contact Benoit Côté (<bcote@uvic.ca>, <benoit.cote@csfk.mta.hu>).
+
+### Installation Instructions
+
+* Create the directory where you want to download the codes.
+* Go in that directory with a terminal and clone the GitHub repository.
+	* `git clone https://github.com/becot85/JINAPyCEE.git`
+* Go into the JINAPyCEE directory and install the codes.
+	* `python setup.py develop`
+	* **Note**: Use the Python version you will be working with.
+* Update the python path to locate JINAPyCEE. This is the path to the directory just before the JINAPyCEE directory, not the one your are currently in.
+	* `export PYTHONPATH="your_path_to_before_JINAPyCEE:$PYTHONPATH"`
+	* **Example**: `export PYTHONPATH="benoitcote/gce_code:$PYTHONPATH"`
+	* **Note**: Do not forget `:$PYTHONPATH` at the end, otherwise the python path will be overwritten.
+* **Note**: The `export` command should be put into your bash file. With MAC, it is the .bash_profile file in your home directory. Otherwise, you will need to define the path each time you open a terminal.
+
+* When in Python mode, you can import the code by typing `import omega_plus`, and `import gamma`.
