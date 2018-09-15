@@ -39,8 +39,8 @@ If you have questions, comments, or want to report a problem, please contact Ben
 	* **Note**: Use the Python version you will be working with.
 * Update the python path to locate JINAPyCEE. This is the path to the directory just before the JINAPyCEE directory, not the one your are currently in.
 	* `export PYTHONPATH="your_path_to_before_JINAPyCEE:$PYTHONPATH"`
+	* **Important**: Do not forget `:$PYTHONPATH` at the end, otherwise the python path will be overwritten.
 	* **Example**: `export PYTHONPATH="benoitcote/gce_code:$PYTHONPATH"`
-	* **Note**: Do not forget `:$PYTHONPATH` at the end, otherwise the python path will be overwritten.
 * **Note**: The `export` command should be put into your bash file. With MAC, it is the .bash_profile file in your home directory. Otherwise, you will need to define the path each time you open a terminal.
 
-* When in Python mode, you can import the code by typing `import omega_plus`, and `import gamma`.
+* When in Python mode, you can import the code by typing `from JINAPyCEE import omega_plus`, and `from JINAPyCEE import gamma`.
