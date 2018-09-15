@@ -85,7 +85,7 @@ class omega_plus():
                  table='yield_tables/agb_and_massive_stars_nugrid_MESAonly_fryer12delay.txt', \
                  table_radio='', decay_file='', sn1a_table_radio='',\
                  bhnsmerger_table_radio='', nsmerger_table_radio='',\
-                 nsmerger_table = 'yield_tables/r_process_rosswog_2014.txt', \
+                 nsmerger_table = 'yield_tables/r_process_arnould_2007.txt', \
                  sn1a_table='yield_tables/sn1a_t86.txt', radio_refinement=1, \
                  pop3_table='yield_tables/popIII_heger10.txt', \
                  hardsetZ=-1, sn1a_on=True, t_nsm_coal=-1.0, nb_nsm_per_m=-1,\
