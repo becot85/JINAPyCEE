@@ -104,7 +104,7 @@ class omega_plus():
                  gal_out_index=1.0, f_halo_to_gal_out=-1, beta_crit=1.0, \
                  DM_outflow_C17=False, m_cold_flow_tresh=-1, C17_eta_z_dep=True, \
                  Grackle_on=False, f_t_ff=1.0, t_inflow=-1.0, t_ff_index=1.0, \
-                 use_decay_module=False, \
+                 use_decay_module=False, yield_tables_dir='',\
                  delayed_extra_log_radio=False, delayed_extra_yields_log_int_radio=False, \
                  r_vir_array=np.array([]), nsm_dtd_power=np.array([]), \
                  dt_in_SSPs=np.array([]), SSPs_in=np.array([]), is_SF_t=np.array([]), \
@@ -177,7 +177,7 @@ class omega_plus():
             mass_sampled=mass_sampled, scale_cor=scale_cor, m_DM_0=m_DM_0,\
             poly_fit_dtd_5th=poly_fit_dtd_5th, poly_fit_range=poly_fit_range,\
             pre_calculate_SSPs=pre_calculate_SSPs, dt_in_SSPs=dt_in_SSPs, SSPs_in=SSPs_in,\
-            use_decay_module=use_decay_module,\
+            use_decay_module=use_decay_module, yield_tables_dir=yield_tables_dir, \
             delayed_extra_dtd_radio=delayed_extra_dtd_radio,\
             delayed_extra_dtd_norm_radio=delayed_extra_dtd_norm_radio,\
             delayed_extra_yields_radio=delayed_extra_yields_radio,\

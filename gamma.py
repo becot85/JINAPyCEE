@@ -86,7 +86,7 @@ class gamma():
                  popIII_info_fast=True, t_sf_z_dep = 1.0, m_crit_on=False, norm_crit_m=8.0e+09, \
                  mass_frac_SSP=0.5, imf_rnd_sampling=False, cte_m_gas = -1.0, \
                  omega_dur=-1.0, tree_trunk_ID=-1, halo_in_out_on=True, \
-                 pre_calculate_SSPs=False, gal_out_index=1.0, \
+                 pre_calculate_SSPs=False, gal_out_index=1.0, yield_tables_dir='', \
                  epsilon_sne_halo=-1, nb_ccsne_per_m=0.01, epsilon_sne_gal=-1, \
                  sfe_m_index=1.0, halo_out_index=1.0, sfe_m_dep=False, \
                  DM_outflow_C17=False, m_cold_flow_tresh=-1, C17_eta_z_dep=True, \
@@ -224,6 +224,7 @@ class gamma():
         self.f_t_ff = f_t_ff
         self.t_inflow = t_inflow
         self.t_ff_index = t_ff_index
+        self.yield_tables_dir = yield_tables_dir
 
         # Keep the GAMMA parameters in memory
         self.tree_trunk_id = tree_trunk_ID
@@ -278,7 +279,7 @@ class gamma():
         #print ('Should add the r-process tables, extra_yields_table, etc...')
         self.o_ini = omega.omega(table=self.table, pop3_table=self.pop3_table,\
                                  special_timesteps=2, cte_sfr=0.0, mgal=1e10,\
-                                 print_off=self.print_off)
+                                 print_off=self.print_off, yield_tables_dir=self.yield_tables_dir)
 
         # Calculate the number of redshifts
         self.nb_redshifts = len(self.redshifts)
@@ -694,6 +695,7 @@ class gamma():
             SSPs_in=self.SSPs_in, halo_out_index=self.halo_out_index,\
             print_off=self.print_off, long_range_ref=self.long_range_ref,\
             calc_SSP_ej=self.calc_SSP_ej, input_yields=True, \
+            yield_tables_dir=self.yield_tables_dir, \
             gal_out_index=self.gal_out_index, f_halo_to_gal_out=self.f_halo_to_gal_out, \
             popIII_info_fast=self.popIII_info_fast, t_sf_z_dep=self.t_sf_z_dep, \
             m_crit_on=self.m_crit_on, norm_crit_m=self.norm_crit_m,\
