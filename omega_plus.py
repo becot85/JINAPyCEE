@@ -121,6 +121,8 @@ class omega_plus():
                  outer_ini_f=np.array([]), ymgal_outer_ini=np.array([]), \
                  sne_L_feedback=np.array([]), sfe_t=np.array([]), \
                  sfh_with_sfe=np.array([]),\
+                 delayed_extra_dtd=np.array([]), delayed_extra_dtd_norm=np.array([]), \
+                 delayed_extra_yields=np.array([]), delayed_extra_yields_norm=np.array([]), \
                  dmo_ini=np.array([]), dmo_ini_t=np.array([]),\
                  delayed_extra_dtd_radio=np.array([]), delayed_extra_dtd_norm_radio=np.array([]), \
                  delayed_extra_yields_radio=np.array([]), \
@@ -178,6 +180,8 @@ class omega_plus():
             poly_fit_dtd_5th=poly_fit_dtd_5th, poly_fit_range=poly_fit_range,\
             pre_calculate_SSPs=pre_calculate_SSPs, dt_in_SSPs=dt_in_SSPs, SSPs_in=SSPs_in,\
             use_decay_module=use_decay_module, yield_tables_dir=yield_tables_dir, \
+            delayed_extra_dtd=delayed_extra_dtd, delayed_extra_dtd_norm=delayed_extra_dtd_norm, \
+            delayed_extra_yields=delayed_extra_yields, delayed_extra_yields_norm=delayed_extra_yields_norm, \
             delayed_extra_dtd_radio=delayed_extra_dtd_radio,\
             delayed_extra_dtd_norm_radio=delayed_extra_dtd_norm_radio,\
             delayed_extra_yields_radio=delayed_extra_yields_radio,\
