@@ -105,7 +105,7 @@ class omega_plus():
                  DM_outflow_C17=False, m_cold_flow_tresh=-1, C17_eta_z_dep=True, \
                  Grackle_on=False, f_t_ff=1.0, t_inflow=-1.0, t_ff_index=1.0, \
                  use_decay_module=False, yield_tables_dir='',\
-                 delayed_extra_log_radio=False, delayed_extra_yields_log_int_radio=False, \
+                 delayed_extra_log=False, delayed_extra_yields_log_int=False, \
                  r_vir_array=np.array([]), nsm_dtd_power=np.array([]), \
                  dt_in_SSPs=np.array([]), SSPs_in=np.array([]), is_SF_t=np.array([]), \
                  DM_array=np.array([]), ism_ini=np.array([]), ism_ini_radio=np.array([]), \
@@ -124,7 +124,6 @@ class omega_plus():
                  delayed_extra_dtd=np.array([]), delayed_extra_dtd_norm=np.array([]), \
                  delayed_extra_yields=np.array([]), delayed_extra_yields_norm=np.array([]), \
                  dmo_ini=np.array([]), dmo_ini_t=np.array([]),\
-                 delayed_extra_dtd_radio=np.array([]), delayed_extra_dtd_norm_radio=np.array([]), \
                  delayed_extra_yields_radio=np.array([]), \
                  delayed_extra_yields_norm_radio=np.array([]), \
                  ytables_radio_in=np.array([]), radio_iso_in=np.array([]), \
@@ -172,8 +171,8 @@ class omega_plus():
             isotopes_in=isotopes_in, ytables_pop3_in=ytables_pop3_in,\
             zm_lifetime_grid_pop3_in=zm_lifetime_grid_pop3_in, ytables_1a_in=ytables_1a_in, \
             ytables_nsmerger_in=ytables_nsmerger_in, dt_in=dt_in, dt_split_info=dt_split_info, \
-            delayed_extra_log_radio=delayed_extra_log_radio,\
-            delayed_extra_yields_log_int_radio=delayed_extra_yields_log_int_radio,\
+            delayed_extra_log=delayed_extra_log,\
+            delayed_extra_yields_log_int=delayed_extra_yields_log_int,\
             ej_massive=ej_massive, ej_agb=ej_agb, ej_sn1a=ej_sn1a, \
             ej_massive_coef=ej_massive_coef, ej_agb_coef=ej_agb_coef, ej_sn1a_coef=ej_sn1a_coef, \
             mass_sampled=mass_sampled, scale_cor=scale_cor, m_DM_0=m_DM_0,\
@@ -182,8 +181,6 @@ class omega_plus():
             use_decay_module=use_decay_module, yield_tables_dir=yield_tables_dir, \
             delayed_extra_dtd=delayed_extra_dtd, delayed_extra_dtd_norm=delayed_extra_dtd_norm, \
             delayed_extra_yields=delayed_extra_yields, delayed_extra_yields_norm=delayed_extra_yields_norm, \
-            delayed_extra_dtd_radio=delayed_extra_dtd_radio,\
-            delayed_extra_dtd_norm_radio=delayed_extra_dtd_norm_radio,\
             delayed_extra_yields_radio=delayed_extra_yields_radio,\
             delayed_extra_yields_norm_radio=delayed_extra_yields_norm_radio,\
             ytables_radio_in=ytables_radio_in, radio_iso_in=radio_iso_in,\
