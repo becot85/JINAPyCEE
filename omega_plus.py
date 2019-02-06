@@ -332,6 +332,19 @@ class omega_plus():
             self.inner.redshift_t[-1])**((-1.5)*self.t_ff_index) / \
                 self.inner.H_0 * 9.7759839e11)
 
+        # Temporary variables for Andrés
+        # All terms are actually dM/dt
+        # dM/dt[timestep index][isotope index]
+        # M_gas = M_gal_inflow + M_ej_stars - M_locked_by_stars - M_gal_outflow
+        self.M_gal_inflow = np.zeros((self.inner.nb_timesteps,self.inner.nb_isotopes))
+        self.M_ej_stars = np.zeros((self.inner.nb_timesteps,self.inner.nb_isotopes))
+        self.M_locked_by_stars = np.zeros((self.inner.nb_timesteps,self.inner.nb_isotopes))
+        self.M_gal_outflow = np.zeros((self.inner.nb_timesteps,self.inner.nb_isotopes))
+        # M_gas_cgm = M_gal_outflow + M_cgm_inflow - M_gal_outflow + M_cgm_external
+        self.M_cgm_outflow = np.zeros((self.inner.nb_timesteps,self.inner.nb_isotopes))
+        self.M_cgm_external = np.zeros((self.inner.nb_timesteps,self.inner.nb_isotopes))
+        # M_cgm_external can either be negative or positive
+
         # Run the simulation
         self.__start_simulation()
 
@@ -769,7 +782,6 @@ class omega_plus():
             if m_stel_temp < 1.0:
                 sfr_temp = 0.0
 
-
             # Evolve the inner region for one step.  The 'i_step_OMEGA + 1'
             # is because OMEGA update the quantities in the next upcoming timestep
             self.inner.run_step(i_step_OMEGA+1, sfr_temp, mass_sampled=mass_sampled, \
@@ -786,6 +798,17 @@ class omega_plus():
 
                     # Correct the mass of the inner region
                     self.__correct_inner_for_sfh(i_step_OMEGA)
+
+            # Collect values for Andrés
+            self.M_gal_inflow[i_step_OMEGA] = ir_iso_temp
+            self.M_ej_stars[i_step_OMEGA] = self.inner.mdot[i_step_OMEGA] / \
+                self.inner.history.timesteps[i_step_OMEGA]
+            self.M_locked_by_stars[i_step_OMEGA] = sfr_temp * \
+                self.inner.ymgal[i_step_OMEGA] / sum(self.inner.ymgal[i_step_OMEGA])
+            self.M_gal_outflow[i_step_OMEGA] = or_temp * \
+                self.inner.ymgal[i_step_OMEGA] / sum(self.inner.ymgal[i_step_OMEGA])
+            self.M_cgm_outflow[i_step_OMEGA] = self.m_lost_t[i_step_OMEGA]
+            self.M_cgm_external[i_step_OMEGA] = self.test_for_andres_cgm_added + self.test_for_andres_cgm_removed
 
         # Evolve the stellar population only .. if a galaxy merger occured
         if self.t_merge > 0.0:
@@ -1197,6 +1220,9 @@ class omega_plus():
         # Calculate the mass of dark matter added or removed
         dm_dm = self.inner.m_DM_t[i_step_OMEGA+1] - self.inner.m_DM_t[i_step_OMEGA]
 
+        self.test_for_andres_cgm_added = np.zeros(self.inner.nb_isotopes)
+        self.test_for_andres_cgm_removed = np.zeros(self.inner.nb_isotopes)
+
         # If gas needs to be removed ..
         if dm_dm < 0.0:
 
@@ -1206,7 +1232,10 @@ class omega_plus():
 
             # Correct the outer gas for the stripping. Here we use i_step_OMEGA+1,
             # since this occurs once galactic inflows and outflows have occured.
+            self.test_for_andres_cgm_removed = self.ymgal_outer[i_step_OMEGA+1] * (1.0-f_keep)
             self.ymgal_outer[i_step_OMEGA+1] *= f_keep
+
+            self.test_for_andres_added = iso_add
 
         # If gas needs to be added ..
         elif not self.is_sub[i_step_OMEGA]:
@@ -1219,6 +1248,7 @@ class omega_plus():
             # this occurs once galactic inflows and outflows have occured.
             # - Inner or outer region based on a M_DM threshold
             iso_add = self.prim_x_frac * dm_m_outer
+            self.test_for_andres_cgm_added = iso_add
             if self.inner.m_DM_t[i_step_OMEGA] > self.m_cold_flow_tresh:
                 self.ymgal_outer[i_step_OMEGA+1] += iso_add
                 #sum_temp = np.sum(self.ymgal_outer[i_step_OMEGA+1])
