@@ -807,7 +807,8 @@ class omega_plus():
                 self.inner.ymgal[i_step_OMEGA] / sum(self.inner.ymgal[i_step_OMEGA])
             self.M_gal_outflow[i_step_OMEGA] = or_temp * \
                 self.inner.ymgal[i_step_OMEGA] / sum(self.inner.ymgal[i_step_OMEGA])
-            self.M_cgm_outflow[i_step_OMEGA] = self.m_lost_t[i_step_OMEGA]
+            self.M_cgm_outflow[i_step_OMEGA] = self.m_lost_t[i_step_OMEGA] * \
+                self.ymgal_outer[i_step_OMEGA] / sum(self.ymgal_outer[i_step_OMEGA])
             self.M_cgm_external[i_step_OMEGA] = self.test_for_andres_cgm_added + self.test_for_andres_cgm_removed
 
         # Evolve the stellar population only .. if a galaxy merger occured
