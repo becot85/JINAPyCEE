@@ -599,8 +599,16 @@ class omega_plus():
         # For each timestep (defined by the OMEGA instance) ...
         for i_step_OMEGA in range(0,i_up_temp):
 
+            # Get convenient dt
+            dt = self.inner.history.timesteps[i_step_OMEGA]
+
             # Calculate the total current gas mass in the inner region
             self.sum_inner_ymgal_cur = np.sum(self.inner.ymgal[i_step_OMEGA])
+            inv_mass = 1 / self.sum_inner_ymgal_cur
+
+            # Calculate the total current gas mass in the outer region
+            self.sum_outer_ymgal_cur = np.sum(self.ymgal_outer[i_step_OMEGA])
+            inv_mass_outer = 1 / self.sum_outer_ymgal_cur
 
             # Calculate the star formation rate [Msun/yr]
             sfr_temp = self.__get_SFR(i_step_OMEGA)
@@ -612,8 +620,8 @@ class omega_plus():
             ir_iso_temp = self.__get_inflow_rate(i_step_OMEGA)
 
             # Convert rates into total masses (except for SFR)
-            m_lost = or_temp * self.inner.history.timesteps[i_step_OMEGA]
-            m_added = ir_iso_temp *  self.inner.history.timesteps[i_step_OMEGA]
+            m_lost = or_temp * dt
+            m_added = ir_iso_temp * dt
             sum_m_added = np.sum(m_added)
             if self.f_halo_to_gal_out >= 0.0:
                 self.m_lost_for_halo = copy.deepcopy(m_lost)
@@ -626,13 +634,16 @@ class omega_plus():
             if sum_m_added > np.sum(self.ymgal_outer[i_step_OMEGA]):
                 m_added = copy.deepcopy(self.ymgal_outer[i_step_OMEGA])
 
+            # Recalculate ir_iso_temp
+            ir_iso_temp = m_added / dt
+            sum_ir_iso_temp = np.sum(ir_iso_temp)
+
             # If the IMF must be sampled ...
-            m_stel_temp = sfr_temp * self.inner.history.timesteps[i_step_OMEGA]
+            m_stel_temp = sfr_temp * dt
             if self.inner.imf_rnd_sampling and self.inner.m_pop_max >= m_stel_temp:
                 
                 # Get the sampled masses
-                mass_sampled = self.inner._get_mass_sampled(\
-                    sfr_temp * self.inner.history.timesteps[i_step_OMEGA])
+                mass_sampled = self.inner._get_mass_sampled(sfr_temp * dt)
 
             # No mass sampled if using the full IMF ...
             else:
@@ -645,6 +656,35 @@ class omega_plus():
             self.inner.run_step(i_step_OMEGA+1, sfr_temp, mass_sampled=mass_sampled, \
                 m_added=m_added, m_lost=m_lost, no_in_out=True)
 
+            # Get production factors for ymgal
+            pp = sum_ir_iso_temp + np.sum(self.inner.mdot[i_step_OMEGA]) / dt
+
+            # Get destruction factors for ymgal
+            dd = (or_temp + sfr_temp) * inv_mass
+
+            # Get new ymgal
+            ymgal_new = (self.sum_inner_ymgal_cur + pp * dt) / (1 + dd * dt)
+
+            # Get rates for intergalactic to circumgalactic flows
+            added_cgm, removed_cgm = self.__get_rates_for_DM_variation(i_step_OMEGA)
+
+            # Get production factors for ymgal_outer
+            pp = or_temp + added_cgm
+
+            # Get destruction factors for ymgal_outer
+            dd = (sum_ir_iso_temp + removed_cgm) * inv_mass_outer
+
+            # Get new ymgal
+            ymgal_outer_new = (self.sum_outer_ymgal_cur + pp * dt)/(1 + dd * dt)
+
+            # Update it !!!!!TODO change when modifying isotopes!
+            nIsot = self.inner.nb_isotopes
+            for ii in range(nIsot):
+                self.inner.ymgal[i_step_OMEGA + 1][ii] = ymgal_new
+                self.ymgal_outer[i_step_OMEGA + 1][ii] = ymgal_outer_new
+            self.inner.ymgal[i_step_OMEGA + 1] /= nIsot
+            self.ymgal_outer[i_step_OMEGA + 1] /= nIsot
+
             # If the inner gas reservoir needs to be modified to recover
             # a pre-defined SFR for the next timestep ..
             #if self.treat_sfh_with_sfe:
@@ -653,15 +693,6 @@ class omega_plus():
 
                     # Correct the mass of the inner region
             #        self.__correct_inner_for_sfh(i_step_OMEGA)
-
-# Testing functions for Andres
-#            if i_step_OMEGA == 0:
-#                print(self.__get_SFR(i_step_OMEGA))
-#                print(self.__get_outflow_rate(i_step_OMEGA, sfr_temp))
-#                print(sum(self.__get_inflow_rate(i_step_OMEGA)))
-#                print(sum(self.inner.mdot[i_step_OMEGA]))
-#                print(self.__get_rates_for_DM_variation(i_step_OMEGA))
-#                print(self.__get_halo_outflow_rate(i_step_OMEGA))
 
         # Evolve the stellar population only .. if a galaxy merger occured
         if self.t_merge > 0.0:
