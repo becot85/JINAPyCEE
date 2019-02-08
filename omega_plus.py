@@ -957,7 +957,8 @@ class omega_plus():
                 dm_m_outer_add = dm_dm * self.f_b_temp
 
         # Return the rates [Msun/yr]
-        return dm_m_outer_add, dm_m_outer_remove
+        return dm_m_outer_add/self.inner.history.timesteps[i_step_OMEGA], \
+               dm_m_outer_remove/self.inner.history.timesteps[i_step_OMEGA]
 
 
     ##############################################
