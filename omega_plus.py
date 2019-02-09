@@ -96,7 +96,7 @@ class omega_plus():
                  input_yields=False, popIII_info_fast=True, t_sf_z_dep=1.0, m_crit_on=False, \
                  norm_crit_m=8.0e+09, mass_frac_SSP=0.5, imf_rnd_sampling=False, \
                  halo_in_out_on=True, pre_calculate_SSPs=False, m_outer_ini=-1.0, \
-                 epsilon_sne_halo=-1, nb_ccsne_per_m=0.01, epsilon_sne_gal=-1, \
+                 epsilon_sne_halo=0.0, nb_ccsne_per_m=0.01, epsilon_sne_gal=-1, \
                  sfe_m_index=1.0, halo_out_index=1.0, is_SF=True, sfe_m_dep=False, \
                  gal_out_index=1.0, f_halo_to_gal_out=-1, beta_crit=1.0, \
                  DM_outflow_C17=False, m_cold_flow_tresh=-1, C17_eta_z_dep=True, \
