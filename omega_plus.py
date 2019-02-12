@@ -1145,7 +1145,7 @@ class omega_plus():
     ##############################################
     #            Get Halo Outflow Rate           #
     ##############################################
-    def __get_halo_outflow_rate(self, i_step_OMEGA):
+    def __get_halo_outflow_rate(self, i_step_OMEGA dtt=0):
 
         '''
         Return rate to remove gas from the halo. [Msun/yr]
