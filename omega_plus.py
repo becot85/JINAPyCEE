@@ -227,6 +227,21 @@ class omega_plus():
         self.len_m_inflow_in = len(m_inflow_in)
         self.is_sub_array = is_sub_array
 
+        # Get inflow rate if input array, and calculate the interpolation coefficients
+        if self.len_m_inflow_in > 0:
+            self.m_inflow_in_rate = np.zeros(self.inner.nb_timesteps)
+            self.m_inflow_in_rate_coef = np.zeros((self.inner.nb_timesteps,2))
+            for i_t in range(self.inner.nb_timesteps):
+                self.m_inflow_in_rate[i_t] = self.m_inflow_in[i_t]/\
+                           self.inner.history.timesteps[i_t]
+            for i_t in range(self.inner.nb_timesteps-1):
+                self.m_inflow_in_rate_coef[i_t][0] = (self.m_inflow_in_rate[i_t+1] - \
+                    self.m_inflow_in_rate[i_t]) / self.inner.history.timesteps[i_t]
+                self.m_inflow_in_rate_coef[i_t][1] = self.m_inflow_in_rate[i_t] - \
+                    self.m_inflow_in_rate_coef[i_t][0] * self.inner.history.age[i_t]
+            self.m_inflow_in_rate_coef[-1][0] = self.m_inflow_in_rate_coef[-2][0]
+            self.m_inflow_in_rate_coef[-1][1] = self.m_inflow_in_rate_coef[-2][1]
+
         # If the sub-halo information is provided ..
         if len(self.is_sub_array) > 0:
 
@@ -373,6 +388,17 @@ class omega_plus():
             for i_sfe in range(0,self.inner.nb_timesteps):
                 self.sfe[i_sfe] = self.inner.sfe
 
+        # Create the interpolation coefficients
+        # sfe = self.sfe_coef[0] * t + self.sfe_coef[1]
+        self.sfe_coef = np.zeros((self.inner.nb_timesteps,2))
+        for i_cmdt in range(self.inner.nb_timesteps-1):
+            self.sfe_coef[i_cmdt][0] = (self.sfe[i_cmdt+1] - \
+                self.sfe[i_cmdt]) / self.inner.history.timesteps[i_cmdt]
+            self.sfe_coef[i_cmdt][1] = self.sfe[i_cmdt] - \
+                self.sfe_coef[i_cmdt][0] * self.inner.history.age[i_cmdt]
+        self.sfe_coef[-1][0] = self.sfe_coef[-2][0]
+        self.sfe_coef[-1][1] = self.sfe_coef[-2][1]
+
 
     ##############################################
     #               Calculate SF t               #
@@ -402,6 +428,15 @@ class omega_plus():
                     self.inner.redshift_t[i_cSFt])**((-1.5)*self.inner.t_sf_z_dep) / \
                         self.inner.H_0 * 9.7759839e11
 
+        # Create the interpolation coefficients
+        # t_SF = self.inner.t_SF_t_coef[0] * t + self.inner.t_SF_t_coef[1]
+        self.inner.t_SF_t_coef = np.zeros((self.inner.nb_timesteps,2))
+        for i_cmdt in range(0, self.inner.nb_timesteps):
+            self.inner.t_SF_t_coef[i_cmdt][0] = (self.inner.t_SF_t[i_cmdt+1] - \
+                self.inner.t_SF_t[i_cmdt]) / self.inner.history.timesteps[i_cmdt]
+            self.inner.t_SF_t_coef[i_cmdt][1] = self.inner.t_SF_t[i_cmdt] - \
+                self.inner.t_SF_t_coef[i_cmdt][0] * self.inner.history.age[i_cmdt]
+
 
     ##############################################
     #             Calculate T_vir t              #
@@ -422,6 +457,15 @@ class omega_plus():
 
             # Calculate the virial temperature [K]
             self.T_vir_t[i_cSFt] = cte_T_vir_t * self.inner.v_vir_DM_t[i_cSFt]**2
+
+        # Create the interpolation coefficients
+        # T_vir = self.T_vir_t_coef[0] * t + self.T_vir_t_coef[1]
+        self.T_vir_t_coef = np.zeros((self.inner.nb_timesteps,2))
+        for i_cmdt in range(0, self.inner.nb_timesteps):
+            self.T_vir_t_coef[i_cmdt][0] = (self.T_vir_t[i_cmdt+1] - \
+                self.T_vir_t[i_cmdt]) / self.inner.history.timesteps[i_cmdt]
+            self.T_vir_t_coef[i_cmdt][1] = self.T_vir_t[i_cmdt] - \
+                self.T_vir_t_coef[i_cmdt][0] * self.inner.history.age[i_cmdt]
 
 
     ##############################################
@@ -447,6 +491,15 @@ class omega_plus():
 
             # Calculate 500 times the critical density
             self.rho_500_t[i_cSFt] = 500.0 * cte_rho_500_t * H_squared
+
+        # Create the interpolation coefficients
+        # rho_500_t = self.rho_500_t_coef[0] * t + self.rho_500_t_coef[1]
+        self.rho_500_t_coef = np.zeros((self.inner.nb_timesteps,2))
+        for i_cmdt in range(0, self.inner.nb_timesteps):
+            self.rho_500_t_coef[i_cmdt][0] = (self.rho_500_t[i_cmdt+1] - \
+                self.rho_500_t[i_cmdt]) / self.inner.history.timesteps[i_cmdt]
+            self.rho_500_t_coef[i_cmdt][1] = self.rho_500_t[i_cmdt] - \
+                self.rho_500_t_coef[i_cmdt][0] * self.inner.history.age[i_cmdt]
 
 
     ##############################################
@@ -611,13 +664,14 @@ class omega_plus():
             inv_mass_outer = 1 / self.sum_outer_ymgal_cur
 
             # Calculate the star formation rate [Msun/yr]
-            sfr_temp = self.__get_SFR(i_step_OMEGA)
+            sfr_temp = self.__get_SFR(i_step_OMEGA, self.sum_inner_ymgal_cur)
 
             # Calculate the galactic outflow rate [Msun/yr]
             or_temp = self.__get_outflow_rate(i_step_OMEGA, sfr_temp)
 
             # Calculate the galactic inflow rate [Msun/yr] for all isotopes
-            ir_iso_temp = self.__get_inflow_rate(i_step_OMEGA)
+            ir_iso_temp = self.__get_inflow_rate(i_step_OMEGA, \
+                self.ymgal_outer[i_step_OMEGA])
 
             # Convert rates into total masses (except for SFR)
             m_lost = or_temp * dt
@@ -666,7 +720,9 @@ class omega_plus():
             ymgal_new = (self.sum_inner_ymgal_cur + pp * dt) / (1 + dd * dt)
 
             # Get rates for intergalactic to circumgalactic flows
-            added_cgm, removed_cgm = self.__get_rates_for_DM_variation(i_step_OMEGA)
+            added_cgm, removed_cgm = \
+                self.__get_rates_for_DM_variation(i_step_OMEGA, \
+                    np.sum(self.ymgal_outer[i_step_OMEGA]))
 
             # Get production factors for ymgal_outer
             pp = or_temp + added_cgm
@@ -703,7 +759,7 @@ class omega_plus():
     ##############################################
     #                  Get SFR                   #
     ##############################################
-    def __get_SFR(self, i_step_OMEGA):
+    def __get_SFR(self, i_step_OMEGA, m_gas_SFR, dtt=0):
 
         '''
         Calculate and return the star formation rate of the inner region
@@ -712,6 +768,9 @@ class omega_plus():
         =========
 
           i_step_OMEGA : Current timestep index of the OMEGA instance
+          m_gas_SFR: Current mass of gas
+          dtt: Time delay off the current time of timestep i_step_OMEGA
+               This is used in case of refinement timesteps during system integration
 
         '''
 
@@ -719,18 +778,41 @@ class omega_plus():
         if self.is_SF:
             if self.SF_allowed_t[i_step_OMEGA]:
                 if self.inner.m_crit_on:
-                    if self.sum_inner_ymgal_cur <= self.inner.m_crit_t[i_step_OMEGA]:
+                    if dtt > 0:
+                        m_crit_t_temp = self.inner.m_crit_t_coef[i_step_OMEGA][0] * \
+                            (self.inner.history.age[i_step_OMEGA]+dtt) + \
+                                self.inner.m_crit_t_coef[i_step_OMEGA][1]
+                    else:
+                        m_crit_t_temp = self.inner.m_crit_t[i_step_OMEGA]
+
+                    if m_gas_SFR <= m_crit_t_temp:
                         m_gas_temp = 0.0
                     else:
-                        #m_gas_temp = self.sum_inner_ymgal_cur - self.inner.m_crit_t[i_step_OMEGA]
-                        m_gas_temp = self.sum_inner_ymgal_cur
+                        m_gas_temp = m_gas_SFR - m_crit_t_temp
+                        #m_gas_temp = m_gas_SFR
+
                 else:
-                    m_gas_temp = copy.deepcopy(self.sum_inner_ymgal_cur)
+                    m_gas_temp = copy.deepcopy(m_gas_SFR)
+
+                # Interpolate SFE
+                if dtt > 0:
+                    sfe_temp = self.sfe_coef[i_step_OMEGA][0] * \
+                        (self.inner.history.age[i_step_OMEGA]+dtt) + \
+                            self.sfe_coef[i_step_OMEGA][1]
+                else:
+                    sfe_temp = self.sfe[i_step_OMEGA]
+
+                # Return star formation rate
                 if self.treat_sfe_t:
-                    return self.sfe[i_step_OMEGA] * m_gas_temp  
+                    return sfe_temp * m_gas_temp  
                 else:
-                    return self.sfe[i_step_OMEGA] * m_gas_temp / \
-                           self.inner.t_SF_t[i_step_OMEGA]
+                    if dtt > 0:
+                        t_SF_t_temp = self.inner.t_SF_t_coef[i_step_OMEGA][0] * \
+                            (self.inner.history.age[i_step_OMEGA]+dtt) + \
+                                self.inner.t_SF_t_coef[i_step_OMEGA][1]
+                    else:
+                        t_SF_t_temp = self.inner.t_SF_t[i_step_OMEGA]
+                    return sfe_temp * m_gas_temp / t_SF_t_temp
             else:
                 return 0.0
         else:
@@ -740,7 +822,7 @@ class omega_plus():
     ##############################################
     #              Get Outflow Rate              #
     ##############################################
-    def __get_outflow_rate(self, i_step_OMEGA, sfr_temp):
+    def __get_outflow_rate(self, i_step_OMEGA, sfr_temp, dtt=0):
 
         '''
         Calculate and return the galactic outflow rate of the inner region
@@ -750,28 +832,59 @@ class omega_plus():
 
           i_step_OMEGA : Current timestep index of the OMEGA instance
           sfr_temp : Star formation rate of the current timestep [Msun/yr]
+          dtt: Time delay off the current time of timestep i_step_OMEGA
+               This is used in case of refinement timesteps during system integration
+
 
         '''
 
         # If we use the DM_evolution option from Cote et al. (2017) ..
         if self.DM_outflow_C17:
+
+            # Interpolate
+            if dtt > 0:
+                m_DM_t_temp = self.inner.m_DM_t_coef[i_step_OMEGA][0] * \
+                    (self.inner.history.age[i_step_OMEGA]+dtt) + \
+                        self.inner.m_DM_t_coef[i_step_OMEGA][1]
+            else:
+                m_DM_t_temp = self.inner.m_DM_t[i_step_OMEGA]
  
             # Calculate the mass-loading factor
             if self.C17_eta_z_dep:
+
+                # Interpolate
+                if dtt > 0:
+                    redshift_t_temp = self.inner.redshift_t_coef[i_step_OMEGA][0] * \
+                        (self.inner.history.age[i_step_OMEGA]+dtt) + \
+                            self.inner.redshift_t_coef[i_step_OMEGA][1]
+                else:
+                    redshift_t_temp = self.inner.m_DM_t[i_step_OMEGA]
+
                 mass_loading_gor = self.eta_norm * \
-                    self.inner.m_DM_t[i_step_OMEGA]**((-0.3333)*self.inner.exp_ml) * \
-                        (1+self.inner.redshift_t[i_step_OMEGA])**(-(0.5)*self.inner.exp_ml)
+                    m_DM_t_temp**((-0.3333)*self.inner.exp_ml) * \
+                        (1+redshift_t_temp)**(-(0.5)*self.inner.exp_ml)
             else:
-                mass_loading_gor = self.eta_norm * \
-                    self.inner.m_DM_t[i_step_OMEGA]**((-0.3333)*self.inner.exp_ml)
+                mass_loading_gor = self.eta_norm * m_DM_t_temp**((-0.3333)*self.inner.exp_ml)
 
         # If the mass-loading follows Crosby et al. (2015) ..
         elif self.epsilon_sne_gal >= 0.0:
 
+            # Interpolate
+            if dtt > 0:
+                m_DM_t_temp = self.inner.m_DM_t_coef[i_step_OMEGA][0] * \
+                    (self.inner.history.age[i_step_OMEGA]+dtt) + \
+                        self.inner.m_DM_t_coef[i_step_OMEGA][1]
+                r_vir_DM_t_temp = self.inner.r_vir_DM_t_coef[i_step_OMEGA][0] * \
+                    (self.inner.history.age[i_step_OMEGA]+dtt) + \
+                        self.inner.r_vir_DM_t_coef[i_step_OMEGA][1]
+            else:
+                m_DM_t_temp = self.inner.m_DM_t[i_step_OMEGA]
+                r_vir_DM_t_temp = self.inner.r_vir_DM_t[i_step_OMEGA]
+
+
             # Calculate the mass-loading factor
             mass_loading_gor = self.gamma_cte * self.nb_ccsne_per_m * self.epsilon_sne_gal * \
-                (self.inner.r_vir_DM_t[i_step_OMEGA]*0.001 / \
-                    self.inner.m_DM_t[i_step_OMEGA])**self.gal_out_index
+                (r_vir_DM_t_temp*0.001 / m_DM_t_temp)**self.gal_out_index
 
         # If the mass-loading is constant ..
         else:
@@ -794,6 +907,9 @@ class omega_plus():
 
         # If the outflow follows the SNe energy (delayed outflows) ..
         else:
+
+            print('NOT READY YET!!!!')
+            return -1
 
             # Calculate the SSP mass
             SSP_mass_temp = sfr_temp * self.inner.history.timesteps[i_step_OMEGA]
@@ -844,7 +960,7 @@ class omega_plus():
     ##############################################
     #              Get Inflow Rate               #
     ##############################################
-    def __get_inflow_rate(self, i_step_OMEGA):
+    def __get_inflow_rate(self, i_step_OMEGA, ymgal_outer, dtt=0):
 
         '''
         Calculate and return the galactic inflow rate of the inner region
@@ -854,11 +970,15 @@ class omega_plus():
         =========
 
           i_step_OMEGA : Current timestep index of the OMEGA instance
+          ymgal_outer: Current isotopic composition of the CGM
 
         '''
 
+        # Total mass of the CGM
+        sum_ymgal_outer = np.sum(ymgal_outer)
+
         # If this is a star forming galaxy ..
-        if self.is_SF and np.sum(self.ymgal_outer[i_step_OMEGA]) > 0.0:
+        if self.is_SF and sum_ymgal_outer > 0.0:
 
           # If input exponential infall laws ..
           # For each infall episode, exp_infall --> [Norm, t_max, timescale]
@@ -866,71 +986,84 @@ class omega_plus():
             cooling_rate = 0.0
             for i_in in range(self.nb_exp_infall):
                 cooling_rate += self.exp_infall[i_in][0] * \
-                    np.exp(-(self.inner.t - self.exp_infall[i_in][1]) / \
+                    np.exp(-((self.inner.t+dtt) - self.exp_infall[i_in][1]) / \
                         self.exp_infall[i_in][2])
+
             # Calculate the isotope cooling rates
             iso_rate_temp = np.zeros(self.inner.nb_isotopes)
-            sum_ymgal_outer_temp = np.sum(self.ymgal_outer[i_step_OMEGA])
-            if sum_ymgal_outer_temp > 0.0:
-                m_tot_inv = 1.0 / sum_ymgal_outer_temp
+            if sum_ymgal_outer > 0.0:
+                m_tot_inv = 1.0 / sum_ymgal_outer
                 for j_gir in range(0,self.inner.nb_isotopes):
-                    iso_rate_temp[j_gir] = cooling_rate * m_tot_inv * \
-                       self.ymgal_outer[i_step_OMEGA][j_gir]
+                    iso_rate_temp[j_gir] = cooling_rate * m_tot_inv * ymgal_outer[j_gir]
 
             # Return the inflow rate of all isotopes
-            return np.array(iso_rate_temp)
+            return iso_rate_temp
 
-          # If an input inflow mass is provided ..
+          # If an input inflow rate is provided ..
           elif self.len_m_inflow_in > 0:
-            cooling_rate = self.m_inflow_in[i_step_OMEGA]/\
-                           self.inner.history.timesteps[i_step_OMEGA]
+
+            # Interpolate
+            if dtt > 0:
+                cooling_rate = self.m_inflow_in_rate_coef[i_step_OMEGA][0] * \
+                    (self.inner.history.age[i_step_OMEGA]+dtt) + \
+                        self.m_inflow_in_rate_coef[i_step_OMEGA][1]
+            else:
+                cooling_rate = self.m_inflow_in_rate[i_step_OMEGA]
+
             # Calculate the isotope cooling rates
-            iso_rate_temp = np.zeros(self.inner.nb_isotopes)
-            sum_ymgal_outer_temp = np.sum(self.ymgal_outer[i_step_OMEGA])
-            if sum_ymgal_outer_temp > 0.0:
-                m_tot_inv = 1.0 / sum_ymgal_outer_temp
-                for j_gir in range(0,self.inner.nb_isotopes):
-                    iso_rate_temp[j_gir] = cooling_rate * m_tot_inv * \
-                       self.ymgal_outer[i_step_OMEGA][j_gir]
+            if sum_ymgal_outer > 0.0:
+                iso_rate_temp = cooling_rate * ymgal_outer / sum_ymgal_outer
+            else:
+                iso_rate_temp = np.zeros(self.inner.nb_isotopes)
 
             # Return the inflow rate of all isotopes
-            return np.array(iso_rate_temp)
+            return iso_rate_temp
 
+          # If the inflow rate needs to be calculated ..
           else:
 
-            # Calculate the free-fall timescale [yr]
+            # Assign an input inflow timescale for the free-fall timescale [yr]
             if self.t_inflow > 0.0:
                 t_ff_temp = self.t_inflow
+
+            # Calculate the free-fall timescale [yr]
             else:
+
+                # Interpolate
+                if dtt > 0:
+                    redshift_temp = self.inner.redshift_t_coef[i_step_OMEGA][0] * \
+                        (self.inner.history.age[i_step_OMEGA]+dtt) + \
+                            self.inner.redshift_t_coef[i_step_OMEGA][1]
+                else:
+                    redshift_temp = self.inner.redshift_t[i_step_OMEGA]
+
+                # Calculate interpolated free-fall
                 t_ff_temp = self.t_ff_cte * self.f_t_ff * 0.1 * (1.0 + \
-                    self.inner.redshift_t[i_step_OMEGA])**((-1.5)*self.t_ff_index) / \
+                    redshift_temp)**((-1.5)*self.t_ff_index) / \
                         self.inner.H_0 * 9.7759839e11
                 # Constant is 1.1107 * 3.086e16 / 3.154e7
 
             # Use free-fall time
             cooling_time = t_ff_temp
+
             #cooling_time = t_ff_temp * (544507042.254/self.inner.m_DM_t[i_step_OMEGA])**0.5
             self.t_cool[i_step_OMEGA] = copy.deepcopy(cooling_time)
 
-            # Get the total mass of the halo gas
-            sum_ymgal_outer_temp = np.sum(self.ymgal_outer[i_step_OMEGA])
-
             # Calculate the total cooling rate [Msun/yr]
-            cooling_rate = sum_ymgal_outer_temp / cooling_time
+            cooling_rate = sum_ymgal_outer / cooling_time
 
             # Calculate the isotope cooling rates
-            iso_rate_temp = np.zeros(self.inner.nb_isotopes)
-            if sum_ymgal_outer_temp > 0.0:
-                m_tot_inv = 1.0 / sum_ymgal_outer_temp
-                for j_gir in range(0,self.inner.nb_isotopes):
-                    iso_rate_temp[j_gir] = cooling_rate * m_tot_inv * \
-                       self.ymgal_outer[i_step_OMEGA][j_gir]
+            if sum_ymgal_outer > 0.0:
+                iso_rate_temp = cooling_rate * ymgal_outer / sum_ymgal_outer
+            else:
+                iso_rate_temp = np.zeros(self.inner.nb_isotopes)
 
             # Return the inflow rate of all isotopes
-            return np.array(iso_rate_temp)
+            return iso_rate_temp
 
         # If this is not a star forming galaxy, there is not inflow
         else:
+
             # Calculate the free-fall timescale [yr]
             if self.t_inflow > 0.0:
                 t_ff_temp = self.t_inflow
@@ -939,13 +1072,15 @@ class omega_plus():
                     self.inner.redshift_t[i_step_OMEGA])**((-1.5)*self.t_ff_index) / \
                         self.inner.H_0 * 9.7759839e11
             self.t_cool[i_step_OMEGA] = copy.deepcopy(t_ff_temp)
+
+            # Return zero inflow rate
             return np.zeros(self.inner.nb_isotopes)
  
 
     ##############################################
     #         Get Rates for DM variation         #
     ##############################################
-    def __get_rates_for_DM_variation(self, i_step_OMEGA):
+    def __get_rates_for_DM_variation(self, i_step_OMEGA, sum_ymgal_outer, dtt=0):
 
         '''
         Add gas to the outer region if the dark matter mass increases, or
@@ -956,6 +1091,7 @@ class omega_plus():
         =========
 
           i_step_OMEGA : Timestep index
+          sum_ymgal_outer: Current isotopic composition of the CGM
 
         '''
 
@@ -967,19 +1103,33 @@ class omega_plus():
         # dark matter halo mass ..
         if self.halo_in_out_on:
 
+            # Interpolate
+            if dtt > 0:
+                m_DM_temp = self.inner.m_DM_t_coef[i_step_OMEGA][0] * \
+                    (self.inner.history.age[i_step_OMEGA]+dtt) + \
+                        self.inner.m_DM_t_coef[i_step_OMEGA][1]
+                m_DM_temp_up = self.inner.m_DM_t_coef[i_step_OMEGA][0] * \
+                    (self.inner.history.age[i_step_OMEGA]+2.0*dtt) + \
+                        self.inner.m_DM_t_coef[i_step_OMEGA][1]
+                timestep_temp = dtt
+            else:
+                m_DM_temp = self.inner.m_DM_t[i_step_OMEGA]
+                m_DM_temp_up = self.inner.m_DM_t[i_step_OMEGA+1]
+                timestep_temp = self.inner.history.timesteps[i_step_OMEGA]
+
             # Calculate the mass of dark matter added or removed
-            dm_dm = self.inner.m_DM_t[i_step_OMEGA+1] - self.inner.m_DM_t[i_step_OMEGA]
+            dm_dm = m_DM_temp_up - m_DM_temp
 
             # If gas needs to be removed ..
             if dm_dm < 0.0:
 
                 # Calculate the fraction of the halo that is not stripped.
                 #f_keep = 1.0 - dm_dm / self.inner.m_DM_t[i_step_OMEGA]
-                f_keep = self.inner.m_DM_t[i_step_OMEGA+1] / self.inner.m_DM_t[i_step_OMEGA]
+                f_keep = m_DM_temp_up / m_DM_temp
 
                 # Correct the outer gas for the stripping. Here we use i_step_OMEGA+1,
                 # since this occurs once galactic inflows and outflows have occured.
-                dm_m_outer_remove = self.ymgal_outer[i_step_OMEGA+1] * (1.0-f_keep)
+                dm_m_outer_remove = sum_ymgal_outer * (1.0-f_keep)
 
             # If gas needs to be added ..
             elif not self.is_sub[i_step_OMEGA]:
@@ -988,8 +1138,8 @@ class omega_plus():
                 dm_m_outer_add = dm_dm * self.f_b_temp
 
         # Return the rates [Msun/yr]
-        return dm_m_outer_add/self.inner.history.timesteps[i_step_OMEGA], \
-               dm_m_outer_remove/self.inner.history.timesteps[i_step_OMEGA]
+        return dm_m_outer_add / timestep_temp, \
+               dm_m_outer_remove / timestep_temp
 
 
     ##############################################
@@ -1016,13 +1166,28 @@ class omega_plus():
         # Calculate the mass ejected from the halo (Crosby et al. 2015)
         else:
 
+            # Interpolate
+            if dtt > 0:
+                m_DM_temp = self.inner.m_DM_t_coef[i_step_OMEGA][0] * \
+                    (self.inner.history.age[i_step_OMEGA]+dtt) + \
+                        self.inner.m_DM_t_coef[i_step_OMEGA][1]
+                r_vir_temp = self.inner.r_vir_DM_t_coef[i_step_OMEGA][0] * \
+                    (self.inner.history.age[i_step_OMEGA]+dtt) + \
+                        self.inner.r_vir_DM_t_coef[i_step_OMEGA][1]
+            else:
+                m_DM_temp = self.inner.m_DM_t[i_step_OMEGA]
+                r_vir_temp = self.inner.r_vir_DM_t[i_step_OMEGA]
+
+
             # In OMEGA, R_vir is in [kpc] while in Crosby+15 R_vir is in [Mpc]
-            m_lost = self.gamma_cte * self.nb_ccsne[i_step_OMEGA] * self.epsilon_sne_halo * \
-                (self.inner.r_vir_DM_t[i_step_OMEGA]*0.001 / \
-                    self.inner.m_DM_t[i_step_OMEGA])**self.halo_out_index
+            m_lost = self.gamma_cte * self.nb_ccsne[i_step_OMEGA] * \
+                self.epsilon_sne_halo * (r_vir_temp*0.001 / m_DM_temp)**self.halo_out_index
 
         # Return the halo outflow rate [Msun/yr]
-        return m_lost / self.inner.history.timesteps[i_step_OMEGA]
+        if dtt > 0:
+            return m_lost / dtt
+        else:
+            return m_lost / self.inner.history.timesteps[i_step_OMEGA]
 
 
     ##############################################
@@ -1072,6 +1237,8 @@ class omega_plus():
           i_step_OMEGA : Timestep index
 
         '''
+
+        print('Warning - This is not ready for integration scheme.')
 
         # Calculate the total current gas mass in the inner region
         self.sum_inner_ymgal_cur = np.sum(self.inner.ymgal[i_step_OMEGA+1])
