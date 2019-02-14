@@ -4,7 +4,7 @@ from __future__ import (division, print_function, absolute_import,
 '''
 
 OMEGA Plus, 2-zone model with a central galaxy sourrounded
-by a circumgalactic medium. 
+by a circumgalactic medium.
 
 FEB2017: B. Cote
 - Creation of the code
@@ -39,7 +39,7 @@ The inner region is represented by an OMEGA simulation:
 # Standard packages
 import numpy as np
 from imp import *
-from pylab import * 
+from pylab import *
 import time as t_module
 import copy
 import math
@@ -129,7 +129,7 @@ class omega_plus():
                  is_sub_array=np.array([])):
 
 
-        # Announce the beginning of the simulation 
+        # Announce the beginning of the simulation
         if not print_off:
             print ('OMEGA+ run in progress..')
         start_time = t_module.time()
@@ -616,7 +616,7 @@ class omega_plus():
                 while t_cur < t_ext:
 
                     # Calculate the overlap time between ext. and cur. bins
-                    dt_trans = t_cur - max([t_ext_prev, t_cur_prev]) 
+                    dt_trans = t_cur - max([t_ext_prev, t_cur_prev])
 
                     # Calculate the mass fraction that needs to be transfered
                     f_dt = dt_trans / (t_ext - t_ext_prev)
@@ -648,20 +648,24 @@ class omega_plus():
         # Reset the inflow and outflow rates to zero
         self.inner.m_outflow_t = np.zeros(self.inner.nb_timesteps)
         self.inner.m_inflow_t = np.zeros(self.inner.nb_timesteps)
+        
+        # Substeps array
+        substeps = [2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64, 96, 128, 192, 256, 384]
+        tolerance = 1e-5
+        min_val = 1e-20
 
         # For each timestep (defined by the OMEGA instance) ...
         for i_step_OMEGA in range(0,i_up_temp):
 
             # Get convenient dt
-            dt = self.inner.history.timesteps[i_step_OMEGA]
+            totDt = self.inner.history.timesteps[i_step_OMEGA]
+
+            # Do a mock-up run in order to run self.inner.run_step and update mdot
+
+            # Mock up start ---------
 
             # Calculate the total current gas mass in the inner region
             self.sum_inner_ymgal_cur = np.sum(self.inner.ymgal[i_step_OMEGA])
-            inv_mass = 1 / self.sum_inner_ymgal_cur
-
-            # Calculate the total current gas mass in the outer region
-            self.sum_outer_ymgal_cur = np.sum(self.ymgal_outer[i_step_OMEGA])
-            inv_mass_outer = 1 / self.sum_outer_ymgal_cur
 
             # Calculate the star formation rate [Msun/yr]
             sfr_temp = self.__get_SFR(i_step_OMEGA, self.sum_inner_ymgal_cur)
@@ -674,86 +678,257 @@ class omega_plus():
                 self.ymgal_outer[i_step_OMEGA])
 
             # Convert rates into total masses (except for SFR)
-            m_lost = or_temp * dt
-            m_added = ir_iso_temp * dt
+            m_lost = or_temp * totDt
+            m_added = ir_iso_temp * totDt
             sum_m_added = np.sum(m_added)
             if self.f_halo_to_gal_out >= 0.0:
                 self.m_lost_for_halo = copy.deepcopy(m_lost)
-
-            # Keep the values in memory
-            self.inner.m_outflow_t[i_step_OMEGA] = m_lost
-            self.inner.m_inflow_t[i_step_OMEGA] = sum_m_added
 
             # Limit the inflow rate if needed (the outflow rate is considered in OMEGA)
             if sum_m_added > np.sum(self.ymgal_outer[i_step_OMEGA]):
                 m_added = copy.deepcopy(self.ymgal_outer[i_step_OMEGA])
 
             # Recalculate ir_iso_temp
-            ir_iso_temp = m_added / dt
+            ir_iso_temp = m_added / totDt
             sum_ir_iso_temp = np.sum(ir_iso_temp)
 
             # If the IMF must be sampled ...
-            m_stel_temp = sfr_temp * dt
+            m_stel_temp = sfr_temp * totDt
             if self.inner.imf_rnd_sampling and self.inner.m_pop_max >= m_stel_temp:
                 
                 # Get the sampled masses
-                mass_sampled = self.inner._get_mass_sampled(sfr_temp * dt)
+                mass_sampled = self.inner._get_mass_sampled(sfr_temp * totDt)
 
             # No mass sampled if using the full IMF ...
             else:
                 mass_sampled = np.array([])
-            if m_stel_temp < 1.0:
-                sfr_temp = 0.0
 
             # Evolve the inner region for one step.  The 'i_step_OMEGA + 1'
-            # is because OMEGA update the quantities in the next upcoming timestep
+            # is because OMEGA updates the quantities in the next upcoming timestep
             self.inner.run_step(i_step_OMEGA+1, sfr_temp, mass_sampled=mass_sampled, \
                 m_added=m_added, m_lost=m_lost, no_in_out=True)
 
+            # Mock up end ---------
+
+            # Copy initial values for safekeeping
+            mgal_init = np.array(self.inner.ymgal[i_step_OMEGA])
+            mcgm_init = np.array(self.ymgal_outer[i_step_OMEGA])
+            final_sfr = 0
+            total_m_added = np.array(mgal_init)*0
+            total_m_lost = 0
+
+            HH = totDt; newHH = HH
+
+            while totDt > 0:
+                converged = True
+                skip_step = False
+
+                # Run the patankar algorithm for the substeps
+                err = []
+                t_m_gal = []; t_m_cgm = []
+                t_total_sfr = []; t_m_added = []; t_m_lost = []
+
+                for ii in range(len(substeps)):
+                    nn = substeps[ii]
+                    fnn = float(nn)
+                    htm = HH/fnn
+
+                    # Integrate
+                    m_gal, m_cmg, total_sfr, m_added, m_lost, skip_step = \
+                            self.__run_substeps(i_step_OMEGA, mgal_init,\
+                            mcgm_init, htm, nn, min_val)
+
+                    # Exit if skip_step
+                    if skip_step:
+                        break
+
+                    # Extrapolate
+                    t_m_gal.append([m_gal])
+                    t_m_cgm.append([m_cmg])
+                    t_total_sfr.append([total_sfr])
+                    t_m_added.append([m_added])
+                    t_m_lost.append([m_lost])
+                    if ii > 0:
+                        for kk in range(len(t_m_gal) - 1):
+                            t_m_gal[-1].append(t_m_gal[-1][kk] +\
+                                    (t_m_gal[-1][kk] - t_m_gal[-2][kk])\
+                                    / ((fnn/substeps[ii - kk - 1]) - 1))
+                            t_m_cgm[-1].append(t_m_cgm[-1][kk] +\
+                                    (t_m_cgm[-1][kk] - t_m_cgm[-2][kk])\
+                                    / ((fnn/substeps[ii - kk - 1]) - 1))
+                            t_total_sfr[-1].append(t_total_sfr[-1][kk] +\
+                                    (t_total_sfr[-1][kk] - t_total_sfr[-2][kk])\
+                                    / ((fnn/substeps[ii - kk - 1]) - 1))
+                            t_m_added[-1].append(t_m_added[-1][kk] +\
+                                    (t_m_added[-1][kk] - t_m_added[-2][kk])\
+                                    / ((fnn/substeps[ii - kk - 1]) - 1))
+                            t_m_lost[-1].append(t_m_lost[-1][kk] +\
+                                    (t_m_lost[-1][kk] - t_m_lost[-2][kk])\
+                                    / ((fnn/substeps[ii - kk - 1]) - 1))
+
+                    # Calculate mean error
+                    if ii > 0:
+                        err.append(np.abs(t_m_gal[-1][-2] - t_m_gal[-1][-1])\
+                                / np.abs(t_m_gal[-1][-2] + min_val))
+                        err[-1] += np.abs(t_m_cgm[-1][-2] - t_m_cgm[-1][-1])\
+                                / np.abs(t_m_cgm[-1][-2] + min_val)
+                        err[-1] += np.abs(t_total_sfr[-1][-2] - t_total_sfr[-1][-1])\
+                                / np.abs(t_total_sfr[-1][-2] + min_val)
+                        err[-1] += np.abs(t_m_added[-1][-2] - t_m_added[-1][-1])\
+                                / np.abs(t_m_added[-1][-2] + min_val)
+                        err[-1] += np.abs(t_m_lost[-1][-2] - t_m_lost[-1][-1])\
+                                / np.abs(t_m_lost[-1][-2] + min_val)
+
+                        err[-1] = np.mean(err[-1])
+
+                        if err[-1] < tolerance:
+                            break
+
+                # Take solution
+                if len(err) > 0:
+                    if err[-1] < tolerance:
+                        mgal_init = np.abs(t_m_gal[-1][-2])
+                        mcgm_init = np.abs(t_m_cgm[-1][-2])
+                        final_sfr += np.abs(t_total_sfr[-1][-2])
+                        total_m_added += np.abs(t_m_added[-1][-2])
+                        total_m_lost += np.abs(t_m_lost[-1][-2])
+                        converged = True
+                    else:
+                        converged = False
+
+                    # Get the root error
+                    for ii in range(len(err)):
+                        err[ii] = (err[ii]/tolerance)**(1./(ii + 2))
+
+                    hhcoef = min(err)
+
+                    # Calculate newHH
+                    if hhcoef <= 0:
+                        newHH = totDt
+                    elif not converged:
+                        newHH = HH*0.1
+                    else:
+                        newHH = HH/hhcoef
+                
+                # Check if converged or skipped
+                if skip_step:
+                    # Reduce fast
+                    if abs(HH - 1) < 0.5:
+                        HH *= 0.5
+                    elif HH > 1:
+                        HH = np.sqrt(HH)
+                    else:
+                        HH *= HH
+
+                else:
+                    # Update totDt and HH
+                    if converged:
+                        totDt -= HH
+
+                    HH = 2*newHH
+
+                # Check that HH remains below totDt
+                if totDt < HH*1.1:
+                    HH = totDt
+
+            # Keep the lost and added values in memory
+            self.inner.m_outflow_t[i_step_OMEGA] = total_m_lost
+            self.inner.m_inflow_t[i_step_OMEGA] = np.sum(total_m_added)
+
+            # If the IMF must be sampled ...
+            if self.inner.imf_rnd_sampling and self.inner.m_pop_max >= final_sfr:
+                
+                # Get the sampled masses
+                mass_sampled = self.inner._get_mass_sampled(final_sfr)
+
+            # No mass sampled if using the full IMF ...
+            else:
+                mass_sampled = np.array([])
+
+            # Now that we are out of it, update final values
+            self.inner.ymgal[i_step_OMEGA + 1] += mgal_init
+            self.ymgal_outer[i_step_OMEGA + 1] += mcgm_init
+
+            # Evolve the stellar population only .. if a galaxy merger occured
+            if self.t_merge > 0.0:
+                for i_step_last in range(i_step_OMEGA + 1,self.inner.nb_timesteps):
+                    self.inner.run_step(i_step_last + 1, 0.0, no_in_out=True)
+
+
+    ##############################################
+    #        Run substeps for patankar           #
+    ##############################################
+    def __run_substeps(self, i_step_OMEGA, mgal_init, mcgm_init, htm, nn,\
+            min_val):
+
+        '''
+        This function runs the patankar algorithm for nn substeps.
+
+        '''
+
+        isot_mgal = mgal_init
+        isot_mcgm = mcgm_init
+        m_lost = 0; m_added = 0; total_sfr = 0
+
+        # Introduce the yields for all isotopes
+        yield_rate = self.inner.mdot[i_step_OMEGA] / (htm*nn)
+
+        for ii in range(nn):
+            # Calculate dtt
+            dtt = ii*htm
+
+            # Calculate the total current gas mass in the inner region
+            current_mgal = np.sum(isot_mgal)
+            inv_mass = 1 / current_mgal
+
+            # Calculate the total current gas mass in the outer region
+            current_mcgm = np.sum(isot_mcgm)
+            inv_mass_cgm = 1 / current_mcgm
+
+            # Calculate the star formation rate [Msun/yr]
+            sfr_temp = self.__get_SFR(i_step_OMEGA, current_mgal, dtt)
+            isot_sfr_temp = isot_mgal * sfr_temp * inv_mass
+            total_sfr += sfr_temp * htm
+
+            # Calculate the galactic outflow rate [Msun/yr]
+            or_temp = self.__get_outflow_rate(i_step_OMEGA, sfr_temp, dtt)
+            isot_or_temp = isot_mgal * or_temp * inv_mass
+            m_lost += or_temp * htm
+
+            # Calculate the galactic inflow rate [Msun/yr] for all isotopes
+            ir_iso_temp = self.__get_inflow_rate(i_step_OMEGA, isot_mcgm, dtt)
+            m_added += ir_iso_temp * htm
+
             # Get production factors for ymgal
-            pp = sum_ir_iso_temp + np.sum(self.inner.mdot[i_step_OMEGA]) / dt
+            pp = ir_iso_temp + yield_rate
 
             # Get destruction factors for ymgal
-            dd = (or_temp + sfr_temp) * inv_mass
+            dd = (isot_or_temp + isot_sfr_temp) / (isot_mgal + min_val)
 
             # Get new ymgal
-            ymgal_new = (self.sum_inner_ymgal_cur + pp * dt) / (1 + dd * dt)
+            isot_mgal = (isot_mgal + pp * htm) / (1 + dd * htm)
 
             # Get rates for intergalactic to circumgalactic flows
-            added_cgm, removed_cgm = \
-                self.__get_rates_for_DM_variation(i_step_OMEGA, \
-                    np.sum(self.ymgal_outer[i_step_OMEGA]))
+            added_cgm, removed_cgm = self.__get_rates_for_DM_variation(i_step_OMEGA,\
+                    current_mcgm, dtt)
+            m_out_cgm = self.__get_halo_outflow_rate(i_step_OMEGA, dtt)
+            isot_added_cgm = added_cgm * self.prim_x_frac
+            isot_removed_cgm = isot_mcgm * removed_cgm * inv_mass_cgm
+            isot_m_out_cgm = isot_mcgm * m_out_cgm * inv_mass_cgm
 
             # Get production factors for ymgal_outer
-            pp = or_temp + added_cgm
+            pp = isot_or_temp + isot_added_cgm
 
             # Get destruction factors for ymgal_outer
-            dd = (sum_ir_iso_temp + removed_cgm) * inv_mass_outer
+            dd = (ir_iso_temp + isot_removed_cgm + isot_m_out_cgm) /\
+                    (isot_mcgm + min_val)
 
-            # Get new ymgal
-            ymgal_outer_new = (self.sum_outer_ymgal_cur + pp * dt)/(1 + dd * dt)
+            # Get new ymgal_outer
+            isot_mcgm = (isot_mcgm + pp * htm) / (1 + dd * htm)
 
-            # Update it !!!!!TODO change when modifying isotopes!
-            nIsot = self.inner.nb_isotopes
-            for ii in range(nIsot):
-                self.inner.ymgal[i_step_OMEGA + 1][ii] = ymgal_new
-                self.ymgal_outer[i_step_OMEGA + 1][ii] = ymgal_outer_new
-            self.inner.ymgal[i_step_OMEGA + 1] /= nIsot
-            self.ymgal_outer[i_step_OMEGA + 1] /= nIsot
+        # Return the values
+        return isot_mgal, isot_mcgm, total_sfr, m_added, m_lost, False
 
-            # If the inner gas reservoir needs to be modified to recover
-            # a pre-defined SFR for the next timestep ..
-            #if self.treat_sfh_with_sfe:
-            #    if i_step_OMEGA < (self.inner.nb_timesteps-1) and \
-            #       self.sfh_t[i_step_OMEGA+1] > 0.0:
-
-                    # Correct the mass of the inner region
-            #        self.__correct_inner_for_sfh(i_step_OMEGA)
-
-        # Evolve the stellar population only .. if a galaxy merger occured
-        if self.t_merge > 0.0:
-            for i_step_last in range(i_step_OMEGA+1,self.inner.nb_timesteps):
-                self.inner.run_step(i_step_last+1, 0.0, no_in_out=True)
 
 
     ##############################################
@@ -804,7 +979,7 @@ class omega_plus():
 
                 # Return star formation rate
                 if self.treat_sfe_t:
-                    return sfe_temp * m_gas_temp  
+                    return sfe_temp * m_gas_temp
                 else:
                     if dtt > 0:
                         t_SF_t_temp = self.inner.t_SF_t_coef[i_step_OMEGA][0] * \
@@ -986,8 +1161,8 @@ class omega_plus():
             cooling_rate = 0.0
             for i_in in range(self.nb_exp_infall):
                 cooling_rate += self.exp_infall[i_in][0] * \
-                    np.exp(-((self.inner.t+dtt) - self.exp_infall[i_in][1]) / \
-                        self.exp_infall[i_in][2])
+                    np.exp(-((self.inner.history.age[i_step_OMEGA] + dtt) - \
+                    self.exp_infall[i_in][1]) / self.exp_infall[i_in][2])
 
             # Calculate the isotope cooling rates
             iso_rate_temp = np.zeros(self.inner.nb_isotopes)
@@ -996,8 +1171,11 @@ class omega_plus():
                 for j_gir in range(0,self.inner.nb_isotopes):
                     iso_rate_temp[j_gir] = cooling_rate * m_tot_inv * ymgal_outer[j_gir]
 
-            # Return the inflow rate of all isotopes
-            return iso_rate_temp
+            # If the rate is too big, return a constant rate
+            dtBig = self.inner.history.timesteps[i_step_OMEGA]
+            init_ymgal_outer = self.ymgal_outer[i_step_OMEGA]
+            if np.sum(iso_rate_temp) * dtBig > np.sum(init_ymgal_outer):
+                iso_rate_temp = init_ymgal_outer / dtBig
 
           # If an input inflow rate is provided ..
           elif self.len_m_inflow_in > 0:
@@ -1005,7 +1183,7 @@ class omega_plus():
             # Interpolate
             if dtt > 0:
                 cooling_rate = self.m_inflow_in_rate_coef[i_step_OMEGA][0] * \
-                    (self.inner.history.age[i_step_OMEGA]+dtt) + \
+                    (self.inner.history.age[i_step_OMEGA] + dtt) + \
                         self.m_inflow_in_rate_coef[i_step_OMEGA][1]
             else:
                 cooling_rate = self.m_inflow_in_rate[i_step_OMEGA]
@@ -1016,8 +1194,11 @@ class omega_plus():
             else:
                 iso_rate_temp = np.zeros(self.inner.nb_isotopes)
 
-            # Return the inflow rate of all isotopes
-            return iso_rate_temp
+            # If the rate is too big, return a constant rate
+            dtBig = self.inner.history.timesteps[i_step_OMEGA]
+            init_ymgal_outer = self.ymgal_outer[i_step_OMEGA]
+            if np.sum(iso_rate_temp) * dtBig > np.sum(init_ymgal_outer):
+                iso_rate_temp = init_ymgal_outer / dtBig
 
           # If the inflow rate needs to be calculated ..
           else:
@@ -1032,7 +1213,7 @@ class omega_plus():
                 # Interpolate
                 if dtt > 0:
                     redshift_temp = self.inner.redshift_t_coef[i_step_OMEGA][0] * \
-                        (self.inner.history.age[i_step_OMEGA]+dtt) + \
+                        (self.inner.history.age[i_step_OMEGA] + dtt) + \
                             self.inner.redshift_t_coef[i_step_OMEGA][1]
                 else:
                     redshift_temp = self.inner.redshift_t[i_step_OMEGA]
@@ -1058,9 +1239,6 @@ class omega_plus():
             else:
                 iso_rate_temp = np.zeros(self.inner.nb_isotopes)
 
-            # Return the inflow rate of all isotopes
-            return iso_rate_temp
-
         # If this is not a star forming galaxy, there is not inflow
         else:
 
@@ -1074,7 +1252,9 @@ class omega_plus():
             self.t_cool[i_step_OMEGA] = copy.deepcopy(t_ff_temp)
 
             # Return zero inflow rate
-            return np.zeros(self.inner.nb_isotopes)
+            iso_rate_temp = np.zeros(self.inner.nb_isotopes)
+
+        return iso_rate_temp
  
 
     ##############################################
@@ -1145,7 +1325,7 @@ class omega_plus():
     ##############################################
     #            Get Halo Outflow Rate           #
     ##############################################
-    def __get_halo_outflow_rate(self, i_step_OMEGA, dtt=0):
+    def __get_halo_outflow_rate(self, i_step_OMEGA, dtt = 0):
 
         '''
         Return rate to remove gas from the halo. [Msun/yr]
@@ -1208,7 +1388,7 @@ class omega_plus():
         # Calculate the total mass metals
         mmetal = 0.0
         nonmetals = ['H-1','H-2','H-3','He-3','He-4','Li-6','Li-7']
-        for k_coZ in range(0,self.inner.nb_isotopes): 
+        for k_coZ in range(0,self.inner.nb_isotopes):
             if not self.inner.history.isotopes[k_coZ] in nonmetals:
                 mmetal += self.ymgal_outer[i_step_OMEGA][k_coZ]
 
@@ -1272,7 +1452,7 @@ class omega_plus():
             # Calculate the mass of gas that needs to be added
             if empty_inner:
                 if self.treat_sfe_t:
-                    m_add_temp = self.sfh_t[i_step_OMEGA+1] / self.sfe[i_step_OMEGA+1]  
+                    m_add_temp = self.sfh_t[i_step_OMEGA+1] / self.sfe[i_step_OMEGA+1]
                 else:
                     m_add_temp = self.sfh_t[i_step_OMEGA+1] * \
                           self.inner.t_SF_t[i_step_OMEGA+1] / self.sfe[i_step_OMEGA+1]
