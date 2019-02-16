@@ -570,7 +570,7 @@ class omega_plus():
 
             dmo_ini has an extra slot in the isotopes for the time,
             which is t = 0.0 for i_ext = 0.
-         
+
         '''
 
         # For every merging galaxy (every branch of a merger tree)
@@ -648,9 +648,13 @@ class omega_plus():
         # Reset the inflow and outflow rates to zero
         self.inner.m_outflow_t = np.zeros(self.inner.nb_timesteps)
         self.inner.m_inflow_t = np.zeros(self.inner.nb_timesteps)
-        
-        # Substeps array
+
+        # Substeps array. These are obtained from the classic GBS sequence:
+        # n_i = 2*n_{i - 2}
         substeps = [2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64, 96, 128, 192, 256, 384]
+
+        # User selected tolerance along with minimum value for error calculation
+        # and the integration method itself
         tolerance = 1e-5
         min_val = 1e-20
 
@@ -695,7 +699,7 @@ class omega_plus():
             # If the IMF must be sampled ...
             m_stel_temp = sfr_temp * totDt
             if self.inner.imf_rnd_sampling and self.inner.m_pop_max >= m_stel_temp:
-                
+
                 # Get the sampled masses
                 mass_sampled = self.inner._get_mass_sampled(sfr_temp * totDt)
 
@@ -713,6 +717,8 @@ class omega_plus():
             # Copy initial values for safekeeping
             mgal_init = np.array(self.inner.ymgal[i_step_OMEGA])
             mcgm_init = np.array(self.ymgal_outer[i_step_OMEGA])
+
+            # Initialize to zero the analysis quantities
             final_sfr = 0
             total_m_added = np.array(mgal_init)*0
             total_m_lost = 0
@@ -742,7 +748,8 @@ class omega_plus():
                     if skip_step:
                         break
 
-                    # Extrapolate
+                    # Extrapolate according to Deuflhard 1983 but with some
+                    # modifications to account for different convergence speed
                     t_m_gal.append([m_gal])
                     t_m_cgm.append([m_cmg])
                     t_total_sfr.append([total_sfr])
@@ -766,7 +773,7 @@ class omega_plus():
                                     (t_m_lost[-1][kk] - t_m_lost[-2][kk])\
                                     / ((fnn/substeps[ii - kk - 1]) - 1))
 
-                    # Calculate mean error
+                    # Calculate mean relative error
                     if ii > 0:
                         err.append(np.abs(t_m_gal[-1][-2] - t_m_gal[-1][-1])\
                                 / np.abs(t_m_gal[-1][-2] + min_val))
@@ -809,7 +816,7 @@ class omega_plus():
                         newHH = HH*0.1
                     else:
                         newHH = HH/hhcoef
-                
+
                 # Check if converged or skipped
                 if skip_step:
                     # Reduce fast
@@ -835,16 +842,6 @@ class omega_plus():
             self.inner.m_outflow_t[i_step_OMEGA] = total_m_lost
             self.inner.m_inflow_t[i_step_OMEGA] = np.sum(total_m_added)
 
-            # If the IMF must be sampled ...
-            if self.inner.imf_rnd_sampling and self.inner.m_pop_max >= final_sfr:
-                
-                # Get the sampled masses
-                mass_sampled = self.inner._get_mass_sampled(final_sfr)
-
-            # No mass sampled if using the full IMF ...
-            else:
-                mass_sampled = np.array([])
-
             # Now that we are out of it, update final values
             self.inner.ymgal[i_step_OMEGA + 1] += mgal_init
             self.ymgal_outer[i_step_OMEGA + 1] += mcgm_init
@@ -866,8 +863,11 @@ class omega_plus():
 
         '''
 
+        # Store initial values
         isot_mgal = mgal_init
         isot_mcgm = mcgm_init
+
+        # Initialize to zero
         m_lost = 0; m_added = 0; total_sfr = 0
 
         # Introduce the yields for all isotopes
@@ -887,12 +887,12 @@ class omega_plus():
 
             # Calculate the star formation rate [Msun/yr]
             sfr_temp = self.__get_SFR(i_step_OMEGA, current_mgal, dtt)
-            isot_sfr_temp = isot_mgal * sfr_temp * inv_mass
+            isot_sfr_temp = sfr_temp * isot_mgal * inv_mass
             total_sfr += sfr_temp * htm
 
             # Calculate the galactic outflow rate [Msun/yr]
             or_temp = self.__get_outflow_rate(i_step_OMEGA, sfr_temp, dtt)
-            isot_or_temp = isot_mgal * or_temp * inv_mass
+            isot_or_temp = or_temp * isot_mgal * inv_mass
             m_lost += or_temp * htm
 
             # Calculate the galactic inflow rate [Msun/yr] for all isotopes
@@ -913,8 +913,8 @@ class omega_plus():
                     current_mcgm, dtt)
             m_out_cgm = self.__get_halo_outflow_rate(i_step_OMEGA, dtt)
             isot_added_cgm = added_cgm * self.prim_x_frac
-            isot_removed_cgm = isot_mcgm * removed_cgm * inv_mass_cgm
-            isot_m_out_cgm = isot_mcgm * m_out_cgm * inv_mass_cgm
+            isot_removed_cgm = removed_cgm * isot_mcgm * inv_mass_cgm
+            isot_m_out_cgm = m_out_cgm * isot_mcgm * inv_mass_cgm
 
             # Get production factors for ymgal_outer
             pp = isot_or_temp + isot_added_cgm
@@ -1173,9 +1173,8 @@ class omega_plus():
 
             # If the rate is too big, return a constant rate
             dtBig = self.inner.history.timesteps[i_step_OMEGA]
-            init_ymgal_outer = self.ymgal_outer[i_step_OMEGA]
-            if np.sum(iso_rate_temp) * dtBig > np.sum(init_ymgal_outer):
-                iso_rate_temp = init_ymgal_outer / dtBig
+            if np.sum(iso_rate_temp) * dtBig > np.sum(ymgal_outer):
+                iso_rate_temp = ymgal_outer / dtBig
 
           # If an input inflow rate is provided ..
           elif self.len_m_inflow_in > 0:
@@ -1196,9 +1195,8 @@ class omega_plus():
 
             # If the rate is too big, return a constant rate
             dtBig = self.inner.history.timesteps[i_step_OMEGA]
-            init_ymgal_outer = self.ymgal_outer[i_step_OMEGA]
-            if np.sum(iso_rate_temp) * dtBig > np.sum(init_ymgal_outer):
-                iso_rate_temp = init_ymgal_outer / dtBig
+            if np.sum(iso_rate_temp) * dtBig > np.sum(ymgal_outer):
+                iso_rate_temp = ymgal_outer / dtBig
 
           # If the inflow rate needs to be calculated ..
           else:
