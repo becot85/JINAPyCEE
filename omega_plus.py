@@ -659,11 +659,6 @@ class omega_plus():
 
         '''
 
-        # The information stored in decay_info is...
-        # decay_info[nb_radio_iso][0] --> Unstable isotope
-        # decay_info[nb_radio_iso][1] --> Stable isotope where it decays
-        # decay_info[nb_radio_iso][2] --> Mean-life (ln2*half-life)[yr]
-
         # Reaction network dictionary
         self.reac_dictionary = {}
 
@@ -672,15 +667,17 @@ class omega_plus():
             return
 
         # Dictionary to store all isotopes
-        self.all_isotopes_index = {}
-        self.all_isotopes = []
+        self.all_isotopes_names = []
+
+        # This dictionary stores all stable isotopes that can
+        # be modified by the present yields
+        self.stable_decayed_isotopes = []
 
         # Dictionary from name to (z, n) and other direction
         self.zn_to_name = {}
         self.name_to_zn = {}
 
-        # Get stable isotopes list and initialize index dictionary
-        index_dictionary = {}
+        # Shorten the name for self.inner.history.isotopes
         hist_isotopes = self.inner.history.isotopes
 
         # Define secondary products depending on the reaction
@@ -695,23 +692,13 @@ class omega_plus():
         # Seconds in a year
         self.yr_to_sec = 31536000
 
-        # Copy of resizable numpy arrays
+        # Copy of radio_iso, to resize it
         cpy_radio_iso = list(self.inner.radio_iso)
-        cpy_ymgal_radio = []
-        cpy_ymgal_outer_radio = []
-        for ii in range(len(self.inner.ymgal_radio)):
-            cpy_ymgal_radio.append(list(self.inner.ymgal_radio[ii]))
-            cpy_ymgal_outer_radio.append(list(self.ymgal_outer_radio[ii]))
 
         # Load the multichannel or single channel network if needed
         # This is done by creating a list of all the decay channels for each of
         # the radioactive isotopes considered here
         if self.inner.use_decay_module:
-
-            # First build the index_dictionary with all the
-            # unstable isotopes explicitly laid out
-            for ii in range(len(cpy_radio_iso)):
-                index_dictionary[cpy_radio_iso[ii]] = ii
 
             # Buld zn <-> name dictionaries
             f_network = os.path.join("decay_data", self.inner.f_network)
@@ -739,243 +726,191 @@ class omega_plus():
                 if (zz + nn) == 0:
                     break
 
-                # Store index for this zn
-                self.all_isotopes_index[(zz, nn)] = ii
-                self.all_isotopes.append((zz, nn))
+                # Store name in this index for fissions
+                name = self.zn_to_name[(zz, nn)]
+                self.all_isotopes_names.append(name)
 
-            # Store first all reactions, later we select
-            all_reactions = {}
-            for ii in range(len(self.all_isotopes)):
-                zz, nn = self.all_isotopes[ii]
-                targ = self.zn_to_name[(zz, nn)]
-                all_reactions[self.zn_to_name[(zz, nn)]] = []
-
-                # Store reaction
-                n_reacts = decay_module.iso.reactions[ii][1]
-                for jj in range(n_reacts):
-                    # Get reaction index
-                    react_indx = decay_module.iso.reactions[ii][jj + 2] - 1
-
-                    # Ignore isomeric transitions
-                    react_type = decay_module.iso.reaction_types[react_indx]
-                    if "IT" in react_type:
-                        #print("Ignoring isomeric transition for {}".format(targ))
-                        continue
-
-                    # TODO
-                    react_prob = decay_module.iso.decay_constant[ii][jj + 1]
-                    if "SF" in react_type:
-                        print("Ignoring fission for {}, probability = {}".format(targ, react_prob))
-                        continue
-
-                    # WARNING: Treating Be-6 as a 2P-decay
-                    # instead of an A-decay
-                    if zz == 4 and nn == 2 and react_indx == 4:
-                        react_indx = 10
-
-                    # Get products for this reaction
-                    products = self.__get_products(zz, nn, ii, react_indx,\
-                            hist_isotopes)
-
-                    # If the element only decays on itself, then ignore this
-                    # reaction
-                    if len(products[0]) == 1:
-                        if targ == products[0][0]:
-                            continue
-
-                    # Decay rate in 1/s
-                    rate = decay_module.iso.decay_constant[ii][0]
-
-                    # Apply the probability for this branch
-                    rate *= decay_module.iso.decay_constant[ii][jj + 1]
-
-                    # Turn decay rate into 1/year
-                    rate *= self.yr_to_sec
-
-                    # Create the reaction instance
-                    all_reactions[targ].append(self._Reaction(targ, products[0],\
-                            rate, ii, products[1], hist_isotopes))
-
-            # Now we can filter the reactions
-            for elem in cpy_radio_iso:
-                # Add all reactions from this, known element
-                if elem not in self.reac_dictionary:
-                    self.reac_dictionary[elem] = all_reactions[elem]
-
-                # Now add all the reactions from its products
-                self.__add_recursive_reactions(elem, hist_isotopes, cpy_radio_iso,\
-                        cpy_ymgal_radio, cpy_ymgal_outer_radio, all_reactions)
-
-            # Fix all the indices
-            for elem in self.reac_dictionary:
-                for reac in self.reac_dictionary[elem]:
-                    # Fix the target index
-                    targ_index = cpy_radio_iso.index(elem)
-                    reac.targ_index = targ_index
-
-                    # Now products
-                    jj = 0
-                    for prod in reac.products:
-                        # Only care about unstable isotopes
-                        if prod in cpy_radio_iso:
-                            prod_index = cpy_radio_iso.index(prod)
-                            reac.radio_prod_index[jj] = prod_index
-                            jj += 1
+            # At this point we need to choose which isotopes to follow
+            # We also store the reactions
+            self.__choose_network(cpy_radio_iso, hist_isotopes)
 
         elif self.inner.len_decay_file > 0:
-            # First build the index_dictionary with all the
-            # unstable isotopes explicitly laid out
-            for ii in range(len(cpy_radio_iso)):
-                index_dictionary[cpy_radio_iso[ii]] = ii
 
-            # Now build the network
+            # The information stored in decay_info is...
+            # decay_info[nb_radio_iso][0] --> Unstable isotope
+            # decay_info[nb_radio_iso][1] --> Stable isotope where it decays
+            # decay_info[nb_radio_iso][2] --> Mean-life (ln2*half-life)[yr]
+
+            # Build the network
             for elem in self.inner.decay_info:
 
-                # Store names and get index
+                # Get names for reaction
                 targ = elem[0]; prod = elem[1]; rate = elem[2]
-                targ_index = index_dictionary[targ]
-
-                # Get product index
-                if prod in hist_isotopes:
-
-                    # Add the index
-                    prod_index = hist_isotopes.index(prod)
-
-                # If isotope is not in the main yields table
-                # it means it is unstable
-                elif product in index_dictionary:
-                    prod_index = index_dictionary[product]
-                else:
-                    print("Adding a new radioactive element!") # TODO
-                    print("Check that everything is correct!") # TODO
-                    # Get the maximum index in the index_dictionary
-                    max_index = max(index_dictionary.values())
-                    index_dictionary[product] = max_index + 1
-
-                    # Add this index to the radio_prod_index list
-                    # and to the self.inner.radio_iso list
-                    prod_index = index_dictionary[product]
-                    cpy_radio_iso.append(product)
-
-                    # Change also the "radio" arrays
-                    for ii in range(len(cpy_ymgal_radio)):
-                        cpy_ymgal_radio[ii].append(0)
-                        cpy_ymgal_outer_radio[ii].append(0)
 
                 # Add reaction
-                reaction = self._Reaction(targ, prod, rate, targ_index, \
-                        prod_index, hist_isotopes)
+                reaction = self._Reaction(targ, prod, rate)
 
                 if targ in self.reac_dictionary:
                     self.reac_dictionary[targ].append(reaction)
                 else:
                     self.reac_dictionary[targ] = [reaction]
 
+                # Store stable product self.stable_decayed_isotopes
+                if prod in hist_isotopes:
+                    if prod not in self.stable_decayed_isotopes:
+                        self.stable_decayed_isotopes.append(prod)
+
         # Restore the (maybe) modified arrays
         self.inner.radio_iso = np.array(cpy_radio_iso)
         self.inner.nb_radio_iso = len(self.inner.radio_iso)
-        self.inner.ymgal_radio = np.array(cpy_ymgal_radio)
-        self.ymgal_outer_radio = np.array(cpy_ymgal_outer_radio)
-        # TODO
-        for elem in self.reac_dictionary:
-            for reac in self.reac_dictionary[elem]:
-                print(reac)
+        self.inner.ymgal_radio = np.zeros((self.inner.nb_timesteps + 1, \
+                self.inner.nb_radio_iso))
+        self.ymgal_outer_radio = np.zeros((self.inner.nb_timesteps + 1, \
+                self.inner.nb_radio_iso))
+
+        # Initialize the decay arrays
+        nb_radio = self.inner.nb_radio_iso
+        nb_iso = len(self.stable_decayed_isotopes)
+        self.decay_from_radio = np.zeros(nb_radio)           # dd_radio
+        self.decay_to_radio = np.zeros((nb_radio, nb_radio)) # pp_radio
+        self.decay_to_stable = np.zeros((nb_iso, nb_radio))  # pp
+
+        # Now for each reaction, add to the decay arrays
+        for target in self.reac_dictionary:
+            # Get target index
+            targ_index = cpy_radio_iso.index(target)
+
+            # Get the inverse of the atomic mass of the target
+            targ_inv_AA = 1/float(target.split("-")[1])
+
+            for reac in self.reac_dictionary[target]:
+                # Add rate for dd_radio
+                self.decay_from_radio[targ_index] += reac.rate
+
+                # Modify rate by dividing for target mass fraction
+                rate_mod_1 = reac.rate*targ_inv_AA
+
+                # Select products list
+                if len(reac.fiss_prods) > 1:
+                    prods = reac.fiss_prods
+                    is_fission = True
+                else:
+                    prods = reac.products
+                    is_fission = False
+
+                # Rate for pp_radio or pp
+                for ii in range(len(prods)):
+                    prod = prods[ii]
+                    prodAA = float(prod.split("-")[1])
+
+                    # We have to divide the rate by the atomic mass of the
+                    # target and multiply by the atomic mass of the product
+                    # to conserve the total mass
+                    rate_mod_2 = rate_mod_1 * prodAA
+
+                    if prod in cpy_radio_iso:
+                        prod_index = cpy_radio_iso.index(prod)
+                    else:
+                        prod_index = self.stable_decayed_isotopes.index(prod)
+
+                    # Modify rate_mod for fissions
+                    if is_fission:
+                        rate_mod_2 *= reac.fiss_rates[ii]
+
+                    if prod in cpy_radio_iso:
+                        self.decay_to_radio[prod_index][targ_index] += rate_mod_2
+                    else:
+                        self.decay_to_stable[prod_index][targ_index] += rate_mod_2
 
 
     ##############################################
-    #        Get the products names and          #
-    #         indices for this reaction          #
+    #        Chose the unstable and stable       #
+    #       isotopes to follow based on the      #
+    #                 yield tables               #
     ##############################################
-    def __get_products(self, zz, nn, targ_index, react_indx,\
-            hist_isotopes):
+    def __choose_network(self, cpy_radio_iso, hist_isotopes):
 
         '''
-        This function returns a list composed of two lists:
-        -one with the names of the reaction products
-        -the other one with their indices.
+        This function populates the unstable and stable
+        isotopes based on the yield tables
 
         '''
 
-        # Initialize list
-        all_products = [[], []]
+        not_yet_followed = cpy_radio_iso[:]
+        while len(not_yet_followed) > 0:
+            # Get the target
+            targ = not_yet_followed.pop()
 
-        # Get the main product first:
-        react_type = decay_module.iso.reaction_types[react_indx]
-        dz = decay_module.iso.reaction_vector[0][react_indx]
-        dn = decay_module.iso.reaction_vector[1][react_indx]
+            # Put the target in cpy_radio_iso
+            if targ in hist_isotopes:
+                if targ not in self.stable_decayed_isotopes:
+                    self.stable_decayed_isotopes.append(targ)
+                continue
 
-        try:
-            prod_name = self.zn_to_name[(zz + dz, nn + dn)]
-            prod_index = self.all_isotopes_index[(zz + dz, nn + dn)]
-        except KeyError:
-            # Ignore non-existent products or strange reactions
-            return all_products
-        except:
-            raise
+            elif targ not in cpy_radio_iso:
+                cpy_radio_iso.append(targ)
 
-        # Correct index if in hist_isotopes
-        if prod_name in hist_isotopes:
-            prod_index = hist_isotopes.index(prod_name)
+            # Retrieve zz, nn
+            zz, nn = self.name_to_zn[targ]
 
-        # Only add if not a fission:
-        if react_indx != 21:
-            all_products[0].append(prod_name)
-            all_products[1].append(prod_index)
+            # Get its decay index
+            ii = self.all_isotopes_names.index(targ)
 
-        # Now get all side products
-        secondaries = self.decay_secondary[react_indx]
-        for second in secondaries:
-            # Get index for secondary
-            zn_second = self.name_to_zn[second]
-            indx = self.all_isotopes_index[zn_second]
+            # Retrieve the number of reactions
+            n_reacts = decay_module.iso.reactions[ii][1]
 
-            all_products[0].append(second)
-            all_products[1].append(indx)
+            # Decay rate in 1/year
+            rate = decay_module.iso.decay_constant[ii][0] * self.yr_to_sec
 
-        # TODO
-        #if react_indx == 21:
-            #print("Ignoring fission of {} for now...".format(self.zn_to_name[(zz, nn)]))
-            #fission_index = decay_module.iso.reactions[targ_index][0]
-            # FISSION IS TREATED LIKE SO:
-                #case(22)  ! fission
-                  #fission_index = reactions(isomer, -1)
-                  #production = production + decayl * s_fission_vector(fission_index,:)
-            #pass
+            # For each reaction, store the products in not_yet_followed if they
+            # are not in cpy_radio_iso
+            for jj in range(n_reacts):
+                prod_list = []
+                react_indx = decay_module.iso.reactions[ii][jj + 2] - 1
 
-        return all_products
+                # WARNING: Ignore isomeric transitions
+                react_type = decay_module.iso.reaction_types[react_indx]
+                if "IT" in react_type:
+                    continue
 
+                # WARNING: Treating Be-6 as a 2P-decay
+                # instead of an A-decay
+                if zz == 4 and nn == 2 and react_indx == 4:
+                    react_indx = 10
 
-    ##############################################
-    #        Get the products names and          #
-    #         indices for this reaction          #
-    ##############################################
-    def __add_recursive_reactions(self, element, hist_isotopes, cpy_radio_iso, \
-            cpy_ymgal_radio, cpy_ymgal_outer_radio, all_reactions):
+                # Get the change in dz and dn
+                dz = decay_module.iso.reaction_vector[0][react_indx]
+                dn = decay_module.iso.reaction_vector[1][react_indx]
+                prod_list.append(self.zn_to_name[(zz + dz, nn + dn)])
 
-        '''
-        This function populates recursively the reactions dictionary
+                # Now get all side products
+                prod_list += self.decay_secondary[react_indx]
 
-        '''
+                # Apply the probability for this branch
+                rate_jj = rate * decay_module.iso.decay_constant[ii][jj + 1]
 
-        for reaction in all_reactions[element]:
-            for product in reaction.products:
-                if product not in hist_isotopes:
-                    if product not in cpy_radio_iso:
-                        # Add isotope to radio_iso
-                        cpy_radio_iso.append(product)
+                # Treat fissions
+                fiss_prods = []; fiss_rates = []
+                if "SF" in react_type:
+                    fission_index = decay_module.iso.reactions[ii][0]
+                    fiss_vect = decay_module.iso.s_fission_vector[fission_index]
+                    for ii in range(len(self.all_isotopes_names)):
+                        if fiss_vect[ii] > 0:
+                            fiss_prods.append(self.all_isotopes_names[ii])
+                            fiss_rates.append(fiss_vect[ii])
 
-                        # Add space in ymgal_radio and ymgal_outer_radio
-                        for ii in range(len(cpy_ymgal_radio)):
-                            cpy_ymgal_radio[ii].append(0)
-                            cpy_ymgal_outer_radio[ii].append(0)
+                # Store this reaction
+                reaction = self._Reaction(targ, prod_list, rate_jj,\
+                        fiss_prods = fiss_prods, fiss_rates = fiss_rates)
+                if targ in self.reac_dictionary:
+                    self.reac_dictionary[targ].append(reaction)
+                else:
+                    self.reac_dictionary[targ] = [reaction]
 
-                        # Add all channels to reac_dictionary
-                        self.reac_dictionary[product] = all_reactions[product]
-
-                        # Add all products recursively
-                        self.__add_recursive_reactions(product, hist_isotopes, \
-                            cpy_radio_iso, cpy_ymgal_radio, \
-                            cpy_ymgal_outer_radio, all_reactions)
+                # Put them in the list!
+                for elem in prod_list + fiss_prods:
+                    if elem not in cpy_radio_iso and elem not in not_yet_followed:
+                        not_yet_followed.append(elem)
 
 
     ##############################################
@@ -1333,21 +1268,18 @@ class omega_plus():
 
         '''
 
-        # Cycle through reactions
-        for key in self.reac_dictionary:
-            for react in self.reac_dictionary[key]:
+        # Simply add the values
+        dd_radio += self.decay_from_radio
 
-                # Add ratios to the product and destruction factors
-                # Firs destruction
-                dd_radio[react.targ_index] += react.rate
+        # For radioactive isotopes
+        for ii in range(self.inner.nb_radio_iso):
+            pp_radio[ii] += sum(self.decay_to_radio[ii] * isot_mass_radio)
 
-                # Now production
-                prod_ratio = react.rate*isot_mass_radio[react.targ_index]
-                for index in react.stable_prod_index:
-                    pp[index] += prod_ratio
-
-                for index in react.radio_prod_index:
-                    pp_radio[index] += prod_ratio
+        # For stable isotopes
+        for ii in range(len(self.stable_decayed_isotopes)):
+            isot = self.stable_decayed_isotopes[ii]
+            indx = self.inner.history.isotopes.index(isot)
+            pp[indx] += sum(self.decay_to_stable[ii] * isot_mass_radio)
 
         return pp, pp_radio, dd_radio
 
@@ -1975,8 +1907,8 @@ class omega_plus():
         #############################
         #        Constructor        #
         #############################
-        def __init__(self, target, products, rate, targ_index, prod_index,\
-                    hist_isotopes):
+        def __init__(self, target, products, rate, fiss_prods = [],\
+                fiss_rates = []):
 
             '''
             Initialize the reaction. It takes a target, a single
@@ -1987,18 +1919,8 @@ class omega_plus():
             self.target = target
             self.products = products if type(products) is list else [products]
             self.rate = rate
-            self.stable_prod_index = []
-            self.radio_prod_index = []
-
-            self.targ_index = targ_index
-            if type(prod_index) is not list:
-                prod_index = [prod_index]
-
-            for ii in range(len(self.products)):
-                if self.products[ii] in hist_isotopes:
-                    self.stable_prod_index.append(prod_index[ii])
-                else:
-                    self.radio_prod_index.append(prod_index[ii])
+            self.fiss_prods = fiss_prods
+            self.fiss_rates = fiss_rates
 
 
         #############################
@@ -2011,7 +1933,7 @@ class omega_plus():
 
             '''
             s = "{} -> {}".format(self.target, self.products[0])
-            for prod in self.products[1:]:
+            for prod in self.products[1:] + self.fiss_prods:
                 s += " + {}".format(prod)
             s += "; rate = {} 1/y".format(self.rate)
 
