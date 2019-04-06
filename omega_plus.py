@@ -677,6 +677,12 @@ class omega_plus():
         self.zn_to_name = {}
         self.name_to_zn = {}
 
+        # TODO Perhaps this should be located on the constructor
+        # Max and min half-lives in years to consider.
+        # This is only applied for decay module
+        self.max_half_life = 1e14
+        self.min_half_life = 1000
+
         # Shorten the name for self.inner.history.isotopes
         hist_isotopes = self.inner.history.isotopes
 
@@ -732,7 +738,12 @@ class omega_plus():
 
             # At this point we need to choose which isotopes to follow
             # We also store the reactions
-            self.__choose_network(cpy_radio_iso, hist_isotopes)
+            got_network = self.__choose_network(cpy_radio_iso, hist_isotopes)
+
+            # If there was a fission, repeat without skipping
+            if not got_network:
+                self.__choose_network(cpy_radio_iso, hist_isotopes,\
+                        can_skip = False)
 
         elif self.inner.len_decay_file > 0:
 
@@ -745,7 +756,7 @@ class omega_plus():
             for elem in self.inner.decay_info:
 
                 # Get names for reaction
-                targ = elem[0]; prod = elem[1]; rate = elem[2]
+                targ = elem[0]; prod = elem[1]; rate = 1 / elem[2]
 
                 # Add reaction
                 reaction = self._Reaction(targ, prod, rate)
@@ -784,6 +795,7 @@ class omega_plus():
             targ_inv_AA = 1/float(target.split("-")[1])
 
             for reac in self.reac_dictionary[target]:
+
                 # Add rate for dd_radio
                 self.decay_from_radio[targ_index] += reac.rate
 
@@ -828,7 +840,7 @@ class omega_plus():
     #       isotopes to follow based on the      #
     #                 yield tables               #
     ##############################################
-    def __choose_network(self, cpy_radio_iso, hist_isotopes):
+    def __choose_network(self, cpy_radio_iso, hist_isotopes, can_skip = True):
 
         '''
         This function populates the unstable and stable
@@ -837,6 +849,7 @@ class omega_plus():
         '''
 
         not_yet_followed = cpy_radio_iso[:]
+        skipped_elements = {}
         while len(not_yet_followed) > 0:
             # Get the target
             targ = not_yet_followed.pop()
@@ -861,6 +874,13 @@ class omega_plus():
 
             # Decay rate in 1/year
             rate = decay_module.iso.decay_constant[ii][0] * self.yr_to_sec
+            half_life = np.log(2) / rate
+
+            # Try to skip reaction if too short
+            skip_elem = False
+            if half_life < self.min_half_life and can_skip:
+                if targ not in self.inner.radio_iso:
+                    skip_elem = True
 
             # For each reaction, store the products in not_yet_followed if they
             # are not in cpy_radio_iso
@@ -871,6 +891,18 @@ class omega_plus():
                 # WARNING: Ignore isomeric transitions
                 react_type = decay_module.iso.reaction_types[react_indx]
                 if "IT" in react_type:
+                    continue
+
+                # Apply the probability for this branch
+                rate_jj = rate * decay_module.iso.decay_constant[ii][jj + 1]
+                half_life_jj = np.log(2) / rate_jj
+
+                # Try to skip reaction if too long
+                if half_life_jj > self.max_half_life and n_reacts > 1:
+                    s = "Reaction of type {}".format(react_type)
+                    s += "for element {} ".format(targ)
+                    s += "too slow. Skipping."
+                    print(s)
                     continue
 
                 # WARNING: Treating Be-6 as a 2P-decay
@@ -886,12 +918,13 @@ class omega_plus():
                 # Now get all side products
                 prod_list += self.decay_secondary[react_indx]
 
-                # Apply the probability for this branch
-                rate_jj = rate * decay_module.iso.decay_constant[ii][jj + 1]
-
                 # Treat fissions
                 fiss_prods = []; fiss_rates = []
                 if "SF" in react_type:
+                    # Should skip nothing if treating fission
+                    if can_skip:
+                        return False
+
                     fission_index = decay_module.iso.reactions[ii][0]
                     fiss_vect = decay_module.iso.s_fission_vector[fission_index]
                     for ii in range(len(self.all_isotopes_names)):
@@ -899,19 +932,94 @@ class omega_plus():
                             fiss_prods.append(self.all_isotopes_names[ii])
                             fiss_rates.append(fiss_vect[ii])
 
-                # Store this reaction
-                reaction = self._Reaction(targ, prod_list, rate_jj,\
-                        fiss_prods = fiss_prods, fiss_rates = fiss_rates)
-                if targ in self.reac_dictionary:
-                    self.reac_dictionary[targ].append(reaction)
+                # Store this reaction unless we are skipping it
+                if skip_elem:
+                    # Store the products and the probability of each channel
+                    if targ in skipped_elements:
+                        skipped_elements[targ].append([prod_list + fiss_prods,\
+                                decay_module.iso.decay_constant[ii][jj + 1]])
+                    else:
+                        skipped_elements[targ] = [[prod_list + fiss_prods,\
+                                decay_module.iso.decay_constant[ii][jj + 1]]]
                 else:
-                    self.reac_dictionary[targ] = [reaction]
+                    # If the reaction is not skipped, just add it
+                    reaction = self._Reaction(targ, prod_list, rate_jj,\
+                            fiss_prods = fiss_prods, fiss_rates = fiss_rates)
 
-                # Put them in the list!
+                    if targ in self.reac_dictionary:
+                        self.reac_dictionary[targ].append(reaction)
+                    else:
+                        self.reac_dictionary[targ] = [reaction]
+
+                # Put products in the list!
                 for elem in prod_list + fiss_prods:
                     if elem not in cpy_radio_iso and elem not in not_yet_followed:
                         not_yet_followed.append(elem)
 
+        # Deal with the skipped elements
+
+        # First, eliminate them from cpy_radio_iso
+        for elem in skipped_elements:
+            if elem in cpy_radio_iso:
+                cpy_radio_iso.remove(elem)
+
+        # Now substitute the skipped elements amongst themselves
+        for elem in skipped_elements:
+            for elem2 in skipped_elements:
+                if elem == elem2:
+                    continue
+
+                cpy_reacs = copy.deepcopy(skipped_elements[elem2])
+                for reac in cpy_reacs:
+                    if elem in reac[0]:
+
+                        # Store probability and other products
+                        prob = reac[1]
+                        other_prods = []
+                        for prod in reac[0]:
+                            if prod != elem:
+                                other_prods.append(prod)
+
+                        # Eliminate this reaction
+                        skipped_elements[elem2].remove(reac)
+
+                        # Now add all reactions for elem
+                        reacs = skipped_elements[elem]
+                        for reac2 in reacs:
+                            # Make a copy
+                            cpy = copy.deepcopy(reac2)
+
+                            # Modify this reaction
+                            cpy[0] += other_prods
+                            cpy[1] *= prob
+                            skipped_elements[elem2].append(cpy)
+
+        # Finally, remove the skipped elements from reactions
+        for elem in skipped_elements:
+            for targ in self.reac_dictionary:
+                cpy_reacs = copy.copy(self.reac_dictionary[targ])
+                for reac in cpy_reacs:
+                    if elem in reac.products:
+                        # Copy rate of reaction
+                        rate = reac.rate
+
+                        # Copy all other products
+                        keep_prods = []
+                        for prod in reac.products:
+                            if prod != elem:
+                                keep_prods.append(prod)
+
+                        # Eliminate reac
+                        self.reac_dictionary[targ].remove(reac)
+
+                        # Now add all the reactions of the skipped element
+                        for reac2 in skipped_elements[elem]:
+                            prod = reac2[0] + keep_prods
+                            this_rate = reac2[1] * rate
+                            reaction = self._Reaction(targ, prod, this_rate)
+                            self.reac_dictionary[targ].append(reaction)
+
+        return True
 
     ##############################################
     #              Start Simulation              #
@@ -931,10 +1039,12 @@ class omega_plus():
         self.inner.m_outflow_t = np.zeros(self.inner.nb_timesteps)
         self.inner.m_inflow_t = np.zeros(self.inner.nb_timesteps)
 
+        # TODO perhaps this should be moved to the constructor
         # Substeps array. These are obtained from the classic GBS sequence:
         # n_i = 2*n_{i - 2}
         substeps = [2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64, 96, 128, 192, 256, 384]
 
+        # TODO perhaps this should be moved to the constructor
         # User selected tolerance along with minimum value for error calculation
         # and the integration method itself
         tolerance = 1e-5
