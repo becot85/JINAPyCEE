@@ -1128,7 +1128,6 @@ class omega_plus():
 
             while totDt > 0:
                 converged = True
-                skip_step = False
 
                 # Run the patankar algorithm for the substeps
                 err = []
@@ -1146,11 +1145,7 @@ class omega_plus():
                         mgal_radio_init, mcgm_init, mcgm_radio_init, htm, nn,\
                         min_val)
                     m_gal, m_gal_radio, m_cmg, m_cgm_radio, total_sfr,\
-                        m_added, m_lost, skip_step = values
-
-                    # Exit if skip_step
-                    if skip_step:
-                        break
+                        m_added, m_lost = values
 
                     # Extrapolate according to Deuflhard 1983 but with some
                     # modifications to account for different convergence speed
@@ -1210,22 +1205,11 @@ class omega_plus():
                     else:
                         newHH = HH/hhcoef
 
-                # Check if converged or skipped
-                if skip_step:
-                    # Reduce fast
-                    if abs(HH - 1) < 0.5:
-                        HH *= 0.5
-                    elif HH > 1:
-                        HH = np.sqrt(HH)
-                    else:
-                        HH *= HH
+                # Update totDt and HH
+                if converged:
+                    totDt -= HH
 
-                else:
-                    # Update totDt and HH
-                    if converged:
-                        totDt -= HH
-
-                    HH = 2*newHH
+                HH = 2*newHH
 
                 # Check that HH remains below totDt
                 if totDt < HH*1.1:
@@ -1284,7 +1268,6 @@ class omega_plus():
         else:
             yield_rate_radio = 0.
 
-        skip_step = False # TODO maybe not necessary
         for ii in range(nn):
             # Calculate dtt
             dtt = ii*htm
@@ -1324,7 +1307,7 @@ class omega_plus():
                     / (isot_mgal_radio + min_val)
 
             # Modify pp, pp_radio, and dd_radio due to decays
-            pp, pp_radio, dd_radio = self.get_radio_pp_dd(pp, pp_radio,\
+            pp, pp_radio, dd_radio = self.__get_radio_pp_dd(pp, pp_radio,\
                     dd_radio, isot_mgal_radio)
 
             # Get new ymgal and ymgal_radio
@@ -1353,7 +1336,7 @@ class omega_plus():
                     + isot_m_out_cgm_radio) / (isot_mcgm_radio + min_val)
 
             # Modify pp, pp_radio, and dd_radio due to decays
-            pp, pp_radio, dd_radio = self.get_radio_pp_dd(pp, pp_radio,\
+            pp, pp_radio, dd_radio = self.__get_radio_pp_dd(pp, pp_radio,\
                     dd_radio, isot_mcgm_radio)
 
             # Get new ymgal_outer and ymgal_outer_radio
@@ -1363,13 +1346,13 @@ class omega_plus():
 
         # Return the values
         return isot_mgal, isot_mgal_radio, isot_mcgm, isot_mcgm_radio, \
-                total_sfr, m_added, m_lost, skip_step
+                total_sfr, m_added, m_lost
 
 
     ##############################################
     #           Get pp, dd from reactions        #
     ##############################################
-    def get_radio_pp_dd(self, pp, pp_radio, dd_radio, isot_mass_radio):
+    def __get_radio_pp_dd(self, pp, pp_radio, dd_radio, isot_mass_radio):
 
         '''
         This function updates pp, pp_radio and dd_radio due
@@ -1392,7 +1375,6 @@ class omega_plus():
             pp[indx] += sum(self.decay_to_stable[ii] * isot_mass_radio)
 
         return pp, pp_radio, dd_radio
-
 
 
     ##############################################
