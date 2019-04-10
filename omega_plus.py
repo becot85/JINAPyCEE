@@ -747,12 +747,7 @@ class omega_plus():
 
             # At this point we need to choose which isotopes to follow
             # We also store the reactions
-            got_network = self.__choose_network(cpy_radio_iso, hist_isotopes)
-
-            # If there was a fission, repeat without skipping
-            if not got_network:
-                self.__choose_network(cpy_radio_iso, hist_isotopes,\
-                        can_skip = False)
+            self.__choose_network(cpy_radio_iso, hist_isotopes)
 
         elif self.inner.len_decay_file > 0:
 
@@ -812,12 +807,7 @@ class omega_plus():
                 rate_mod_1 = reac.rate*targ_inv_AA
 
                 # Select products list
-                if len(reac.fiss_prods) > 1:
-                    prods = reac.fiss_prods
-                    is_fission = True
-                else:
-                    prods = reac.products
-                    is_fission = False
+                prods = reac.products
 
                 # Rate for pp_radio or pp
                 for ii in range(len(prods)):
@@ -833,10 +823,6 @@ class omega_plus():
                         prod_index = cpy_radio_iso.index(prod)
                     else:
                         prod_index = self.stable_decayed_isotopes.index(prod)
-
-                    # Modify rate_mod for fissions
-                    if is_fission:
-                        rate_mod_2 *= reac.fiss_rates[ii]
 
                     if prod in cpy_radio_iso:
                         self.decay_to_radio[prod_index][targ_index] += rate_mod_2
@@ -873,13 +859,13 @@ class omega_plus():
                 cpy_radio_iso.append(targ)
 
             # Get its decay index
-            ii = self.all_isotopes_names.index(targ)
+            targ_index = self.all_isotopes_names.index(targ)
 
             # Retrieve the number of reactions
-            n_reacts = decay_module.iso.reactions[ii][1]
+            n_reacts = decay_module.iso.reactions[targ_index][1]
 
             # Decay rate in 1/year
-            rate = decay_module.iso.decay_constant[ii][0] * self.yr_to_sec
+            rate = decay_module.iso.decay_constant[targ_index][0] * self.yr_to_sec
             half_life = np.log(2) / rate
 
             # Try to skip reaction if too short
@@ -892,23 +878,29 @@ class omega_plus():
             # are not in cpy_radio_iso
             for jj in range(n_reacts):
                 prod_list = []
-                react_indx = decay_module.iso.reactions[ii][jj + 2] - 1
+                react_indx = decay_module.iso.reactions[targ_index][jj + 2] - 1
                 react_type = decay_module.iso.reaction_types[react_indx]
 
                 # Apply the probability for this branch
-                rate_jj = rate * decay_module.iso.decay_constant[ii][jj + 1]
+                rate_jj = rate * decay_module.iso.decay_constant[targ_index][jj + 1]
                 half_life_jj = np.log(2) / rate_jj
 
                 # Try to skip reaction if too long
                 if half_life_jj > self.max_half_life and n_reacts > 1:
                     s = "Reaction of type {}".format(react_type)
-                    s += "for element {} ".format(targ)
-                    s += "too slow. Skipping."
+                    s += "for element {} too slow. Skipping.".format(targ)
                     print(s)
                     continue
 
                 # Get the product index and name
-                prod_index = decay_module.iso.product_isomer[ii][jj] - 1
+                prod_index = decay_module.iso.product_isomer[targ_index][jj] - 1
+                if prod_index == targ_index and "SF" not in react_type:
+                    s = "Warning: {} decaying into itself! ".format(targ)
+                    s += "However, the module does not currently track "
+                    s += "an isomer of {}. Skipping decay.".format(targ)
+                    print(s)
+                    continue
+
                 prod_name = self.all_isotopes_names[prod_index]
                 prod_list.append(prod_name)
 
@@ -918,35 +910,40 @@ class omega_plus():
                 # Treat fissions
                 fiss_prods = []; fiss_rates = []
                 if "SF" in react_type:
-                    # Should skip nothing if treating fission
-                    if can_skip:
-                        return False
+                    # Never skip a fission
+                    skip_elem = False
 
-                    fission_index = decay_module.iso.reactions[ii][0]
+                    fission_index = decay_module.iso.reactions[targ_index][0]
                     fiss_vect = decay_module.iso.s_fission_vector[fission_index]
-                    for ii in range(len(self.all_isotopes_names)):
-                        if fiss_vect[ii] > 0:
-                            fiss_prods.append(self.all_isotopes_names[ii])
-                            fiss_rates.append(fiss_vect[ii])
+                    for kk in range(len(self.all_isotopes_names)):
+                        if fiss_vect[kk] > 0:
+                            fiss_prods.append(self.all_isotopes_names[kk])
+                            fiss_rates.append(fiss_vect[kk])
 
                 # Store this reaction unless we are skipping it
                 if skip_elem:
                     # Store the products and the probability of each channel
                     if targ in skipped_elements:
-                        skipped_elements[targ].append([prod_list + fiss_prods,\
-                                decay_module.iso.decay_constant[ii][jj + 1]])
+                        skipped_elements[targ].append([prod_list,\
+                                decay_module.iso.decay_constant[targ_index][jj + 1]])
                     else:
-                        skipped_elements[targ] = [[prod_list + fiss_prods,\
-                                decay_module.iso.decay_constant[ii][jj + 1]]]
+                        skipped_elements[targ] = [[prod_list,\
+                                decay_module.iso.decay_constant[targ_index][jj + 1]]]
                 else:
                     # If the reaction is not skipped, just add it
-                    reaction = self._Reaction(targ, prod_list, rate_jj,\
-                            fiss_prods = fiss_prods, fiss_rates = fiss_rates)
+                    if len(fiss_prods) > 0:
+                        reac_list = []
+                        # If in a fission, just add every product as a new reaction
+                        for kk in range(len(fiss_prods)):
+                            reac_list.append(self._Reaction(targ,\
+                                    [fiss_prods[kk]], rate_jj*fiss_rates[kk]))
+                    else:
+                        reac_list = [self._Reaction(targ, prod_list, rate_jj)]
 
                     if targ in self.reac_dictionary:
-                        self.reac_dictionary[targ].append(reaction)
+                        self.reac_dictionary[targ] += reac_list
                     else:
-                        self.reac_dictionary[targ] = [reaction]
+                        self.reac_dictionary[targ] = reac_list
 
                 # Put products in the list!
                 for elem in prod_list + fiss_prods:
@@ -1016,8 +1013,6 @@ class omega_plus():
                             this_rate = reac2[1] * rate
                             reaction = self._Reaction(targ, prod, this_rate)
                             self.reac_dictionary[targ].append(reaction)
-
-        return True
 
     ##############################################
     #              Start Simulation              #
@@ -1997,8 +1992,7 @@ class omega_plus():
         #############################
         #        Constructor        #
         #############################
-        def __init__(self, target, products, rate, fiss_prods = [],\
-                fiss_rates = []):
+        def __init__(self, target, products, rate):
 
             '''
             Initialize the reaction. It takes a target, a single
@@ -2009,8 +2003,6 @@ class omega_plus():
             self.target = target
             self.products = products if type(products) is list else [products]
             self.rate = rate
-            self.fiss_prods = fiss_prods
-            self.fiss_rates = fiss_rates
 
 
         #############################
@@ -2023,7 +2015,7 @@ class omega_plus():
 
             '''
             s = "{} -> {}".format(self.target, self.products[0])
-            for prod in self.products[1:] + self.fiss_prods:
+            for prod in self.products[1:]:
                 s += " + {}".format(prod)
             s += "; rate = {} 1/y".format(self.rate)
 
