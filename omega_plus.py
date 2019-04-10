@@ -674,8 +674,7 @@ class omega_plus():
         self.stable_decayed_isotopes = []
 
         # Dictionary from name to (z, n) and other direction
-        self.zn_to_name = {}
-        self.name_to_zn = {}
+        zn_to_name = {}
 
         # TODO Perhaps this should be located on the constructor
         # Max and min half-lives in years to consider.
@@ -716,14 +715,16 @@ class omega_plus():
                 for line in fread:
                     lnlst = line.split()
                     zz = int(lnlst[0]); aa = int(lnlst[1]); name = lnlst[2]
+
+                    # Create name
                     name = name + "-" + lnlst[1]
 
                     nn = aa - zz
-                    self.zn_to_name[(zz, nn)] = name
-                    self.name_to_zn[name] = (zz, nn)
+                    zn_to_name[(zz, nn)] = name
 
             # Get the decay information from the decay module
             # Store all the isotopic information
+            prevZZ, prevNN = None, None
             for ii in range(len(decay_module.iso.reactions)):
                 # Z and n of every isotope in the module
                 zz = decay_module.iso.z[ii]; nn = decay_module.iso.n[ii]
@@ -732,9 +733,17 @@ class omega_plus():
                 if (zz + nn) == 0:
                     break
 
-                # Store name in this index for fissions
-                name = self.zn_to_name[(zz, nn)]
+                # Store name for these zz, nn
+                name = zn_to_name[(zz, nn)]
+
+                # Check if isomer
+                if zz == prevZZ and nn == prevNN:
+                    name = "*" + name
+                    while name in self.all_isotopes_names:
+                        name = "*" + name
+
                 self.all_isotopes_names.append(name)
+                prevZZ, prevNN = zz, nn
 
             # At this point we need to choose which isotopes to follow
             # We also store the reactions
@@ -863,9 +872,6 @@ class omega_plus():
             elif targ not in cpy_radio_iso:
                 cpy_radio_iso.append(targ)
 
-            # Retrieve zz, nn
-            zz, nn = self.name_to_zn[targ]
-
             # Get its decay index
             ii = self.all_isotopes_names.index(targ)
 
@@ -887,11 +893,7 @@ class omega_plus():
             for jj in range(n_reacts):
                 prod_list = []
                 react_indx = decay_module.iso.reactions[ii][jj + 2] - 1
-
-                # WARNING: Ignore isomeric transitions
                 react_type = decay_module.iso.reaction_types[react_indx]
-                if "IT" in react_type:
-                    continue
 
                 # Apply the probability for this branch
                 rate_jj = rate * decay_module.iso.decay_constant[ii][jj + 1]
@@ -905,15 +907,10 @@ class omega_plus():
                     print(s)
                     continue
 
-                # WARNING: Treating Be-6 as a 2P-decay
-                # instead of an A-decay
-                if zz == 4 and nn == 2 and react_indx == 4:
-                    react_indx = 10
-
-                # Get the change in dz and dn
-                dz = decay_module.iso.reaction_vector[0][react_indx]
-                dn = decay_module.iso.reaction_vector[1][react_indx]
-                prod_list.append(self.zn_to_name[(zz + dz, nn + dn)])
+                # Get the product index and name
+                prod_index = decay_module.iso.product_isomer[ii][jj] - 1
+                prod_name = self.all_isotopes_names[prod_index]
+                prod_list.append(prod_name)
 
                 # Now get all side products
                 prod_list += self.decay_secondary[react_indx]
@@ -954,7 +951,8 @@ class omega_plus():
                 # Put products in the list!
                 for elem in prod_list + fiss_prods:
                     if elem not in cpy_radio_iso and elem not in not_yet_followed:
-                        not_yet_followed.append(elem)
+                        if elem not in self.stable_decayed_isotopes:
+                            not_yet_followed.append(elem)
 
         # Deal with the skipped elements
 
