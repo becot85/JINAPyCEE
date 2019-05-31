@@ -37,6 +37,7 @@ import copy
 import math
 import os
 import re
+import imp
 
 # Define where is the working directory
 # This is where the NuPyCEE code will be extracted
