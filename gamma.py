@@ -28,16 +28,6 @@ Each branch is represented by an OMEGA_SAM or OMEGA simulation:
 global notebookmode
 notebookmode=True
 
-# Import the OMEGA module
-try:
-    from NuPyCEE import omega
-    from NuPyCEE import read_yields as ry
-    from JINAPyCEE import omega_plus
-except ValueError:
-    import omega
-    import omega_plus
-    import read_yields as ry
-
 # Standard packages
 import numpy as np
 from imp import *

@@ -46,16 +46,6 @@ import imp
 global notebookmode
 notebookmode=True
 
-# Import the class that reads the input yield tables
-try:
-    from NuPyCEE import read_yields as ry
-    # Import the OMEGA module
-    from NuPyCEE import omega
-except ValueError:
-    import read_yields as ry
-    import omega
-
-
 # Define where is the working directory
 # This is where the NuPyCEE code will be extracted
 global global_path
