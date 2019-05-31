@@ -25,6 +25,9 @@ Each branch is represented by an OMEGA_SAM or OMEGA simulation:
 
 '''
 
+global notebookmode
+notebookmode=True
+
 # Import the OMEGA module
 try:
     from NuPyCEE import omega
@@ -45,17 +48,29 @@ import math
 import os
 import re
 
-
-# SYGMADIR needs to point to the SYGMA directory
-global notebookmode
-notebookmode=True
+# Define where is the working directory
+# This is where the NuPyCEE code will be extracted
 global global_path
 try:
     if os.environ['SYGMADIR']:
-        global_path=os.environ['SYGMADIR']
+        global_path = os.environ['SYGMADIR']
 except KeyError:
     global_path=os.getcwd()
 global_path=global_path+'/'
+
+# This is where the JINAPyCEE code will be extracted
+global global_path_jinapycee
+try:
+    if os.environ['JINAPYDIR']:
+        global_path_jinapycee = os.environ['JINAPYDIR']
+except KeyError:
+    global_path_jinapycee=os.getcwd()
+global_path_jinapycee=global_path_jinapycee+'/'
+
+# Import NuPyCEE and JINAPyCEE codes
+ry = imp.load_source('read_yields', global_path+'read_yields.py')
+omega = imp.load_source('omega', global_path+'omega.py')
+omega_plus = imp.load_source('omega_plus', global_path_jinapycee+'omega_plus.py')
 
 
 #####################
@@ -95,8 +110,7 @@ class gamma():
                  br_is_SF_t=np.array([]), br_r_vir=np.array([]), \
                  dt_in_SSPs=np.array([]), SSPs_in=np.array([]), \
                  M_array=np.array([]), ytables_in=np.array([]), \
-                 zm_lifetime_grid_nugrid_in=np.array([]), isotopes_in=np.array([]), \
-                 ytables_pop3_in=np.array([]), zm_lifetime_grid_pop3_in=np.array([]), \
+                 ytables_pop3_in=np.array([]), \
                  ytables_1a_in=np.array([]), ytables_nsmerger_in=np.array([]),\
                  dt_in=np.array([]), dt_split_info=np.array([]), ej_massive=np.array([]), \
                  ej_agb=np.array([]), ej_sn1a=np.array([]), ej_massive_coef=np.array([]),\
@@ -109,6 +123,8 @@ class gamma():
                  br_is_SF=np.array([]), sne_L_feedback=np.array([]),\
                  br_sfe_t=np.array([]), br_sfh=np.array([]),
                  br_is_sub=np.array([])):
+
+        print('This is the correct gamma')
 
         # Check if we have the trunk ID
         if tree_trunk_ID < 0:
@@ -186,10 +202,7 @@ class gamma():
         self.cte_m_gas = cte_m_gas
         self.omega_dur = omega_dur
         self.ytables_in = ytables_in
-        self.zm_lifetime_grid_nugrid_in = zm_lifetime_grid_nugrid_in
-        self.isotopes_in = isotopes_in
         self.ytables_pop3_in = ytables_pop3_in
-        self.zm_lifetime_grid_pop3_in = zm_lifetime_grid_pop3_in
         self.ytables_1a_in = ytables_1a_in
         self.ytables_nsmerger_in = ytables_nsmerger_in
         self.dt_in = dt_in
@@ -702,9 +715,7 @@ class gamma():
             t_nsm_coal=self.t_nsm_coal, imf_rnd_sampling=self.imf_rnd_sampling,\
             DM_array=self.DM_array, ism_ini=self.ism_ini, mdot_ini=self.mdot_ini, \
             mdot_ini_t=self.mdot_ini_t, ytables_in=self.o_ini.ytables,\
-            zm_lifetime_grid_nugrid_in=self.o_ini.zm_lifetime_grid_nugrid,\
             isotopes_in=self.o_ini.history.isotopes, ytables_pop3_in=self.o_ini.ytables_pop3,\
-            zm_lifetime_grid_pop3_in=self.o_ini.zm_lifetime_grid_pop3,\
             ytables_1a_in=self.o_ini.ytables_1a, dt_in=self.dt_in,\
             dt_split_info=self.dt_split_info, ej_massive=self.ej_massive,\
             ej_agb=self.ej_agb, ej_sn1a=self.ej_sn1a, ej_massive_coef=self.ej_massive_coef,\

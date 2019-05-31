@@ -2,7 +2,7 @@ from __future__ import (division, print_function, absolute_import,
                         unicode_literals)
 
 '''
-this is a test
+
 OMEGA Plus, 2-zone model with a central galaxy sourrounded
 by a circumgalactic medium. 
 
@@ -41,6 +41,10 @@ import copy
 import math
 import os
 import re
+import imp
+
+global notebookmode
+notebookmode=True
 
 # Import the class that reads the input yield tables
 try:
@@ -51,22 +55,29 @@ except ValueError:
     import read_yields as ry
     import omega
 
-# Import modules for Grackle (gas cooling)
-#import yt
-#from pygrackle import chemistry_data, setup_fluid_container
-#from pygrackle.utilities.physical_constants import \
-#mass_hydrogen_cgs, sec_per_Myr, cm_per_mpc, sec_per_Gyr
 
-# SYGMADIR needs to point to the SYGMA directory
-global notebookmode
-notebookmode=True
+# Define where is the working directory
+# This is where the NuPyCEE code will be extracted
 global global_path
 try:
     if os.environ['SYGMADIR']:
-        global_path=os.environ['SYGMADIR']
+        global_path = os.environ['SYGMADIR']
 except KeyError:
     global_path=os.getcwd()
 global_path=global_path+'/'
+
+# This is where the JINAPyCEE code will be extracted
+global global_path_jinapycee
+try:
+    if os.environ['JINAPYDIR']:
+        global_path_jinapycee = os.environ['JINAPYDIR']
+except KeyError:
+    global_path_jinapycee=os.getcwd()
+global_path_jinapycee=global_path_jinapycee+'/'
+
+# Import NuPyCEE codes
+ry = imp.load_source('read_yields', global_path+'read_yields.py')
+omega = imp.load_source('omega', global_path+'omega.py')
 
 
 #####################
@@ -131,6 +142,7 @@ class omega_plus():
                  test_clayton=np.array([]), exp_infall=np.array([]), m_inflow_in=np.array([]),\
                  is_sub_array=np.array([])):
 
+        print('This is the correct omega_plus')
 
         # Announce the beginning of the simulation 
         if not print_off:
