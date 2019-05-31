@@ -115,8 +115,6 @@ class gamma():
                  br_sfe_t=np.array([]), br_sfh=np.array([]),
                  br_is_sub=np.array([])):
 
-        print('This is the correct gamma')
-
         # Check if we have the trunk ID
         if tree_trunk_ID < 0:
             print ('Error - GAMMA needs the tree_trunk_ID parameter.')

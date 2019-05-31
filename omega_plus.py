@@ -132,8 +132,6 @@ class omega_plus():
                  test_clayton=np.array([]), exp_infall=np.array([]), m_inflow_in=np.array([]),\
                  is_sub_array=np.array([])):
 
-        print('This is the correct omega_plus')
-
         # Announce the beginning of the simulation 
         if not print_off:
             print ('OMEGA+ run in progress..')
