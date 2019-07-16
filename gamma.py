@@ -25,15 +25,8 @@ Each branch is represented by an OMEGA_SAM or OMEGA simulation:
 
 '''
 
-# Import the OMEGA module
-try:
-    from NuPyCEE import omega
-    from NuPyCEE import read_yields as ry
-    from JINAPyCEE import omega_plus
-except ValueError:
-    import omega
-    import omega_plus
-    import read_yields as ry
+global notebookmode
+notebookmode=True
 
 # Standard packages
 import numpy as np
@@ -44,19 +37,23 @@ import copy
 import math
 import os
 import re
+import imp
 
 
-# SYGMADIR needs to point to the SYGMA directory
-global notebookmode
-notebookmode=True
-global global_path
-try:
-    if os.environ['SYGMADIR']:
-        global_path=os.environ['SYGMADIR']
-except KeyError:
-    global_path=os.getcwd()
-global_path=global_path+'/'
+# Define where is the working directory
+# This is where the NuPyCEE code will be extracted
+global_path = './NuPyCEE/'
 
+# This is where the JINAPyCEE code will be extracted
+global_path_jinapycee=  './JINAPyCEE/'
+
+# Import NuPyCEE and JINAPyCEE codes
+import NuPyCEE.read_yields as ry
+import NuPyCEE.omega as omega
+import JINAPyCEE.omega_plus as omega_plus
+#ry = imp.load_source('read_yields', global_path+'read_yields.py')
+#omega = imp.load_source('omega', global_path+'omega.py')
+#omega_plus = imp.load_source('omega_plus', global_path_jinapycee+'omega_plus.py')
 
 #####################
 # Class Declaration #
