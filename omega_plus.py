@@ -39,31 +39,23 @@ The inner region is represented by an OMEGA simulation:
 
 # Standard packages
 import numpy as np
-from imp import *
 from pylab import * 
 import time as t_module
 import copy
-import math
 import os
-import re
-import imp
 
 global notebookmode
 notebookmode=True
 
 # Define where is the working directory
 # This is where the NuPyCEE code will be extracted
-global_path = './NuPyCEE/'
-
-# This is where the JINAPyCEE code will be extracted
-global_path_jinapycee=  './JINAPyCEE/'
+nupy_path = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+nupy_path = os.path.join(nupy_path, "NuPyCEE")
 
 # Import NuPyCEE codes
 import NuPyCEE.read_yields as ry
 import NuPyCEE.omega as omega
 import NuPyCEE.decay_module as decay_module
-#ry = imp.load_source('read_yields', global_path+'read_yields.py')
-#omega = imp.load_source('omega', global_path+'omega.py')
 
 
 #####################
@@ -146,7 +138,6 @@ class omega_plus():
                  inter_M_points_pop3_tree=np.array([]), nb_inter_M_points=np.array([]),\
                  inter_M_points=np.array([]), y_coef_Z_aM_ej=np.array([])):
 
-        print('This is the testing JINAPY version')
         # Announce the beginning of the simulation
         if not print_off:
             print ('OMEGA+ run in progress..')
@@ -329,9 +320,9 @@ class omega_plus():
         self.km_to_Mpc = 3.24077929e-20
 
         # Calculate the primordial composition (mass fraction) for inflows ..
-        iniabu_table = 'yield_tables/iniabu/iniab_bb_walker91.txt'
+        iniabu_table = os.path.join("yield_tables", "iniabu", "iniab_bb_walker91.txt")
         ytables_bb = ry.read_yield_sn1a_tables( \
-            global_path+iniabu_table, self.inner.history.isotopes)
+            os.path.join(nupy_path, iniabu_table), self.inner.history.isotopes)
         self.prim_x_frac = ytables_bb.get(quantity='Yields')
         del ytables_bb
 
@@ -753,7 +744,7 @@ class omega_plus():
 
             # Buld zn <-> name dictionaries
             f_network = os.path.join("decay_data", self.inner.f_network)
-            with open(global_path+f_network, "r") as fread:
+            with open(os.path.join(nupy_path, f_network), "r") as fread:
                 # Skip header line
                 fread.readline()
 
@@ -925,8 +916,7 @@ class omega_plus():
             for jj in range(n_reacts):
                 prod_list = []
                 react_indx = decay_module.iso.reactions[targ_index][jj + 2] - 1
-                #react_type = decay_module.iso.reaction_types[react_indx].decode('UTF-8')
-                react_type = decay_module.iso.reaction_types[react_indx]
+                react_type = str(decay_module.iso.reaction_types[react_indx])
 
                 # Apply the probability for this branch
                 rate_jj = rate * decay_module.iso.decay_constant[targ_index][jj + 1]
@@ -957,7 +947,7 @@ class omega_plus():
                 # Treat fissions
                 fiss_prods = []; fiss_rates = []
                 if "SF" in react_type:
-                    # Never skip a fission
+                    # Never skip a fission if we arrive here
                     skip_elem = False
 
                     fission_index = decay_module.iso.reactions[targ_index][0]
@@ -1314,7 +1304,6 @@ class omega_plus():
 
         # Announce the end of the simulation
         print ('   OMEGA run completed -',self.inner._gettime())
-
 
     ##############################################
     #        Run substeps for patankar           #
