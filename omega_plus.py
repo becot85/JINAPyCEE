@@ -40,33 +40,30 @@ The inner region is represented by an OMEGA simulation:
 # Standard packages
 import numpy as np
 from imp import *
-from pylab import *
+from pylab import * 
 import time as t_module
 import copy
 import math
 import os
 import re
+import imp
 
-# Import the class that reads the input yield tables
-try:
-    import read_yields as ry
-    import omega
-    import decay_module
-except ValueError:
-    from NuPyCEE import read_yields as ry
-    from NuPyCEE import omega
-    from NuPyCEE import decay_module
-
-# SYGMADIR needs to point to the SYGMA directory
 global notebookmode
 notebookmode=True
-global global_path
-try:
-    if os.environ['SYGMADIR']:
-        global_path=os.environ['SYGMADIR']
-except KeyError:
-    global_path=os.getcwd()
-global_path=global_path+'/'
+
+# Define where is the working directory
+# This is where the NuPyCEE code will be extracted
+global_path = './NuPyCEE/'
+
+# This is where the JINAPyCEE code will be extracted
+global_path_jinapycee=  './JINAPyCEE/'
+
+# Import NuPyCEE codes
+import NuPyCEE.read_yields as ry
+import NuPyCEE.omega as omega
+import NuPyCEE.decay_module as decay_module
+#ry = imp.load_source('read_yields', global_path+'read_yields.py')
+#omega = imp.load_source('omega', global_path+'omega.py')
 
 
 #####################
@@ -104,7 +101,9 @@ class omega_plus():
                  gal_out_index=1.0, f_halo_to_gal_out=-1, beta_crit=1.0, \
                  DM_outflow_C17=False, m_cold_flow_tresh=-1, C17_eta_z_dep=True, \
                  Grackle_on=False, f_t_ff=1.0, t_inflow=-1.0, t_ff_index=1.0, \
-                 use_decay_module=False,\
+                 use_decay_module=False, max_half_life=1e14, min_half_life=1000,\
+                 substeps = [2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64, 96, 128, 192, 256, 384],\
+                 tolerance = 1e-5, min_val = 1e-20, print_param=False,\
                  delayed_extra_log=False, delayed_extra_yields_log_int=False, \
                  r_vir_array=np.array([]), nsm_dtd_power=np.array([]), \
                  dt_in_SSPs=np.array([]), SSPs_in=np.array([]), is_SF_t=np.array([]), \
@@ -129,14 +128,43 @@ class omega_plus():
                  ytables_radio_in=np.array([]), radio_iso_in=np.array([]), \
                  ytables_1a_radio_in=np.array([]), ytables_nsmerger_radio_in=np.array([]),\
                  test_clayton=np.array([]), exp_infall=np.array([]), m_inflow_in=np.array([]),\
-                 is_sub_array=np.array([])):
+                 is_sub_array=np.array([]),\
+                 inter_Z_points = np.array([]),\
+                 nb_inter_Z_points = np.array([]), y_coef_M = np.array([]),\
+                 y_coef_M_ej = np.array([]), y_coef_Z_aM = np.array([]),\
+                 y_coef_Z_bM = np.array([]), y_coef_Z_bM_ej = np.array([]),\
+                 tau_coef_M = np.array([]), tau_coef_M_inv = np.array([]),\
+                 tau_coef_Z_aM = np.array([]), tau_coef_Z_bM = np.array([]),\
+                 tau_coef_Z_aM_inv = np.array([]), tau_coef_Z_bM_inv = np.array([]),\
+                 y_coef_M_pop3 = np.array([]), y_coef_M_ej_pop3 = np.array([]),\
+                 tau_coef_M_pop3 = np.array([]), tau_coef_M_pop3_inv = np.array([]),\
+                 inter_lifetime_points_pop3=np.array([]),\
+                 inter_lifetime_points_pop3_tree=np.array([]),\
+                 nb_inter_lifetime_points_pop3=np.array([]),\
+                 inter_lifetime_points=np.array([]),inter_lifetime_points_tree=np.array([]),\
+                 nb_inter_lifetime_points=np.array([]), nb_inter_M_points_pop3=np.array([]),\
+                 inter_M_points_pop3_tree=np.array([]), nb_inter_M_points=np.array([]),\
+                 inter_M_points=np.array([]), y_coef_Z_aM_ej=np.array([])):
 
-
+        print('This is the testing JINAPY version')
         # Announce the beginning of the simulation
         if not print_off:
             print ('OMEGA+ run in progress..')
         start_time = t_module.time()
         self.start_time = start_time
+
+        # Print parameters if asked for ..
+        if print_param:
+            dicto = locals()
+            for key in dicto.keys():
+                try:
+                    if len(dicto[key]) > 0:
+                        pass
+                except TypeError:
+                    print(key,'=',dicto[key])
+                except:
+                    raise
+                
 
         # Set the initial mass of the inner reservoir
         if mgal > 0.0:
@@ -191,7 +219,26 @@ class omega_plus():
             ytables_1a_radio_in=ytables_1a_radio_in,\
             ytables_nsmerger_radio_in=ytables_nsmerger_radio_in,\
             test_clayton=test_clayton, radio_refinement=radio_refinement,\
-            nsm_dtd_power=nsm_dtd_power)
+            nsm_dtd_power=nsm_dtd_power,\
+            inter_Z_points=inter_Z_points,\
+            nb_inter_Z_points=nb_inter_Z_points, y_coef_M=y_coef_M,\
+            y_coef_M_ej=y_coef_M_ej, y_coef_Z_aM=y_coef_Z_aM,\
+            y_coef_Z_bM=y_coef_Z_bM, y_coef_Z_bM_ej=y_coef_Z_bM_ej,\
+            tau_coef_M=tau_coef_M, tau_coef_M_inv=tau_coef_M_inv,\
+            tau_coef_Z_aM=tau_coef_Z_aM, tau_coef_Z_bM=tau_coef_Z_bM,\
+            tau_coef_Z_aM_inv=tau_coef_Z_aM_inv, tau_coef_Z_bM_inv=tau_coef_Z_bM_inv,\
+            y_coef_M_pop3=y_coef_M_pop3, y_coef_M_ej_pop3=y_coef_M_ej_pop3,\
+            tau_coef_M_pop3=tau_coef_M_pop3, tau_coef_M_pop3_inv=tau_coef_M_pop3_inv,\
+            inter_lifetime_points_pop3=inter_lifetime_points_pop3,\
+            inter_lifetime_points_pop3_tree=inter_lifetime_points_pop3_tree,\
+            nb_inter_lifetime_points_pop3=nb_inter_lifetime_points_pop3,\
+            inter_lifetime_points=inter_lifetime_points,\
+            inter_lifetime_points_tree=inter_lifetime_points_tree,\
+            nb_inter_lifetime_points=nb_inter_lifetime_points,\
+            nb_inter_M_points_pop3=nb_inter_M_points_pop3,\
+            inter_M_points_pop3_tree=inter_M_points_pop3_tree,\
+            nb_inter_M_points=nb_inter_M_points, inter_M_points=inter_M_points,\
+            y_coef_Z_aM_ej=y_coef_Z_aM_ej)
 
         # Parameters associated with OMEGA+
         self.m_outer_ini = m_outer_ini
@@ -229,6 +276,11 @@ class omega_plus():
         self.m_inflow_in = m_inflow_in
         self.len_m_inflow_in = len(m_inflow_in)
         self.is_sub_array = is_sub_array
+        self.max_half_life = max_half_life
+        self.min_half_life = min_half_life
+        self.substeps = substeps
+        self.tolerance = tolerance
+        self.min_val = min_val
 
         # Get inflow rate if input array, and calculate the interpolation coefficients
         if self.len_m_inflow_in > 0:
@@ -675,13 +727,7 @@ class omega_plus():
 
         # Dictionary from name to (z, n) and other direction
         zn_to_name = {}
-
-        # TODO Perhaps this should be located on the constructor
-        # Max and min half-lives in years to consider.
-        # This is only applied for decay module
-        self.max_half_life = 1e14
-        self.min_half_life = 1000
-
+ 
         # Shorten the name for self.inner.history.isotopes
         hist_isotopes = self.inner.history.isotopes
 
@@ -707,7 +753,7 @@ class omega_plus():
 
             # Buld zn <-> name dictionaries
             f_network = os.path.join("decay_data", self.inner.f_network)
-            with open(f_network, "r") as fread:
+            with open(global_path+f_network, "r") as fread:
                 # Skip header line
                 fread.readline()
 
@@ -879,6 +925,7 @@ class omega_plus():
             for jj in range(n_reacts):
                 prod_list = []
                 react_indx = decay_module.iso.reactions[targ_index][jj + 2] - 1
+                #react_type = decay_module.iso.reaction_types[react_indx].decode('UTF-8')
                 react_type = decay_module.iso.reaction_types[react_indx]
 
                 # Apply the probability for this branch
@@ -1031,20 +1078,12 @@ class omega_plus():
         # Reset the inflow and outflow rates to zero
         self.inner.m_outflow_t = np.zeros(self.inner.nb_timesteps)
         self.inner.m_inflow_t = np.zeros(self.inner.nb_timesteps)
-
-        # TODO perhaps this should be moved to the constructor
-        # Substeps array. These are obtained from the classic GBS sequence:
-        # n_i = 2*n_{i - 2}
-        substeps = [2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64, 96, 128, 192, 256, 384]
-
-        # TODO perhaps this should be moved to the constructor
-        # User selected tolerance along with minimum value for error calculation
-        # and the integration method itself
-        tolerance = 1e-5
-        min_val = 1e-20
+        continue_for_now = True
 
         # For each timestep (defined by the OMEGA instance) ...
         for i_step_OMEGA in range(0,i_up_temp):
+            if not continue_for_now:
+                break
 
             # Get convenient dt
             totDt = self.inner.history.timesteps[i_step_OMEGA]
@@ -1119,8 +1158,14 @@ class omega_plus():
 
             HH = totDt; newHH = HH
 
+            #print('While Loop - going IN')
             while totDt > 0:
+                #print(HH, totDt)
                 converged = True
+
+                if HH < 1.0e-20 and totDt > 1.0e-19:
+                    continue_for_now = False
+                    break
 
                 # Run the patankar algorithm for the substeps
                 err = []
@@ -1128,15 +1173,15 @@ class omega_plus():
                 t_m_cgm = []; t_m_cgm_radio = []
                 t_total_sfr = []; t_m_added = []; t_m_lost = []
 
-                for ii in range(len(substeps)):
-                    nn = substeps[ii]
+                #print('For Loop - going IN')
+                for ii in range(len(self.substeps)):
+                    nn = self.substeps[ii]
                     fnn = float(nn)
                     htm = HH/fnn
 
                     # Integrate
                     values = self.__run_substeps(i_step_OMEGA, mgal_init,\
-                        mgal_radio_init, mcgm_init, mcgm_radio_init, htm, nn,\
-                        min_val)
+                        mgal_radio_init, mcgm_init, mcgm_radio_init, htm, nn)
                     m_gal, m_gal_radio, m_cmg, m_cgm_radio, total_sfr,\
                         m_added, m_lost = values
 
@@ -1158,21 +1203,22 @@ class omega_plus():
                         for kk in range(len(t_m_gal) - 1):
                             for tt in t_extrap:
                                 tt[-1].append(tt[-1][kk] + (tt[-1][kk] - tt[-2][kk])\
-                                    / ((fnn/substeps[ii - kk - 1]) - 1))
+                                    / ((fnn/self.substeps[ii - kk - 1]) - 1))
 
                     # Calculate mean relative error
                     if ii > 0:
                         err.append(0)
                         for tt in t_extrap:
                             err[-1] += np.mean(np.abs(tt[-1][-2] - tt[-1][-1])\
-                                    / np.abs(tt[-1][-2] + min_val))
+                                    / np.abs(tt[-1][-2] + self.min_val))
 
-                        if err[-1] < tolerance:
+                        if err[-1] < self.tolerance:
                             break
+                #print('For Loop - going OUT')
 
                 # Take solution
                 if len(err) > 0:
-                    if err[-1] < tolerance:
+                    if err[-1] < self.tolerance:
                         mgal_init = np.abs(t_m_gal[-1][-2])
                         mgal_radio_init = np.abs(t_m_gal_radio[-1][-2])
                         mcgm_init = np.abs(t_m_cgm[-1][-2])
@@ -1186,7 +1232,7 @@ class omega_plus():
 
                     # Get the root error
                     for ii in range(len(err)):
-                        err[ii] = (err[ii]/tolerance)**(1./(ii + 2))
+                        err[ii] = (err[ii]/self.tolerance)**(1./(ii + 2))
 
                     hhcoef = min(err)
 
@@ -1207,6 +1253,9 @@ class omega_plus():
                 # Check that HH remains below totDt
                 if totDt < HH*1.1:
                     HH = totDt
+
+            #print('While Loop - going OUT')
+
 
             # Keep the lost and added values in memory
             self.inner.m_outflow_t[i_step_OMEGA] = total_m_lost
@@ -1229,12 +1278,51 @@ class omega_plus():
                 for i_step_last in range(i_step_OMEGA + 1, self.inner.nb_timesteps):
                     self.inner.run_step(i_step_last + 1, 0.0, no_in_out=True)
 
+            # Get the new metallicity of the gas and update history class
+            self.inner.zmetal = self.inner._getmetallicity(i_step_OMEGA)
+            self.inner._update_history(i_step_OMEGA)
+
+            # Update original arrays
+            self.inner.history.sfr_abs[i_step_OMEGA] = final_sfr / self.inner.history.timesteps[i_step_OMEGA]
+            self.inner.m_outflow_t[i_step_OMEGA] = total_m_lost
+
+        # FINAL TIMESTEP  .. PUT THIS IN A FUNCTION
+
+        # Do the final update of the history class
+        self.inner._update_history_final()
+
+        # Add the evolution arrays to the history class
+        self.inner.history.m_tot_ISM_t = self.inner.m_tot_ISM_t
+        self.inner.history.eta_outflow_t = self.inner.eta_outflow_t
+
+        # If external control ...
+        if self.inner.external_control:
+            self.inner.history.sfr_abs[i_step_OMEGA] = self.inner.history.sfr_abs[i_step_OMEGA-1]
+
+        # Calculate the total mass of gas
+        self.inner.m_stel_tot = 0.0
+        for i_tot in range(0,len(self.inner.history.timesteps)):
+            self.inner.m_stel_tot += self.inner.history.sfr_abs[i_tot] * \
+                self.inner.history.timesteps[i_tot]
+        if self.inner.m_stel_tot > 0.0:            
+            self.inner.m_stel_tot = 1.0 / self.inner.m_stel_tot
+        self.inner.f_m_stel_tot = []
+        m_temp = 0.0
+        for i_tot in range(0,len(self.inner.history.timesteps)):
+            m_temp += self.inner.history.sfr_abs[i_tot] * \
+                self.inner.history.timesteps[i_tot]
+            self.inner.f_m_stel_tot.append(m_temp*self.inner.m_stel_tot)
+        self.inner.f_m_stel_tot.append(self.inner.f_m_stel_tot[-1])
+
+        # Announce the end of the simulation
+        print ('   OMEGA run completed -',self.inner._gettime())
+
 
     ##############################################
     #        Run substeps for patankar           #
     ##############################################
     def __run_substeps(self, i_step_OMEGA, mgal_init, mgal_radio_init,\
-            mcgm_init, mcgm_radio_init, htm, nn, min_val):
+            mcgm_init, mcgm_radio_init, htm, nn):
 
         '''
         This function runs the patankar algorithm for nn substeps.
@@ -1295,12 +1383,13 @@ class omega_plus():
             pp_radio = ir_iso_temp_radio + yield_rate_radio
 
             # Get destruction factors for ymgal and ymgal_radio
-            dd = (isot_or_temp + isot_sfr_temp) / (isot_mgal + min_val)
+            dd = (isot_or_temp + isot_sfr_temp) / (isot_mgal + self.min_val)
             dd_radio = (isot_or_temp_radio + isot_sfr_temp_radio)\
-                    / (isot_mgal_radio + min_val)
+                    / (isot_mgal_radio + self.min_val)
 
             # Modify pp, pp_radio, and dd_radio due to decays
-            pp, pp_radio, dd_radio = self.__get_radio_pp_dd(pp, pp_radio,\
+            if self.inner.len_decay_file > 0:
+                pp, pp_radio, dd_radio = self.__get_radio_pp_dd(pp, pp_radio,\
                     dd_radio, isot_mgal_radio)
 
             # Get new ymgal and ymgal_radio
@@ -1324,12 +1413,13 @@ class omega_plus():
 
             # Get destruction factors for ymgal_outer and ymgal_outer_radio
             dd = (ir_iso_temp + isot_removed_cgm + isot_m_out_cgm) /\
-                    (isot_mcgm + min_val)
+                    (isot_mcgm + self.min_val)
             dd_radio = (ir_iso_temp_radio + isot_removed_cgm_radio\
-                    + isot_m_out_cgm_radio) / (isot_mcgm_radio + min_val)
+                    + isot_m_out_cgm_radio) / (isot_mcgm_radio + self.min_val)
 
             # Modify pp, pp_radio, and dd_radio due to decays
-            pp, pp_radio, dd_radio = self.__get_radio_pp_dd(pp, pp_radio,\
+            if self.inner.len_decay_file > 0:
+                pp, pp_radio, dd_radio = self.__get_radio_pp_dd(pp, pp_radio,\
                     dd_radio, isot_mcgm_radio)
 
             # Get new ymgal_outer and ymgal_outer_radio
