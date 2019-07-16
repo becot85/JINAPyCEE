@@ -103,7 +103,7 @@ class omega_plus():
                  Grackle_on=False, f_t_ff=1.0, t_inflow=-1.0, t_ff_index=1.0, \
                  use_decay_module=False, max_half_life=1e14, min_half_life=1000,\
                  substeps = [2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64, 96, 128, 192, 256, 384],\
-                 tolerance = 1e-5, min_val = 1e-20,\
+                 tolerance = 1e-5, min_val = 1e-20, print_param=False,\
                  delayed_extra_log=False, delayed_extra_yields_log_int=False, \
                  r_vir_array=np.array([]), nsm_dtd_power=np.array([]), \
                  dt_in_SSPs=np.array([]), SSPs_in=np.array([]), is_SF_t=np.array([]), \
@@ -128,7 +128,23 @@ class omega_plus():
                  ytables_radio_in=np.array([]), radio_iso_in=np.array([]), \
                  ytables_1a_radio_in=np.array([]), ytables_nsmerger_radio_in=np.array([]),\
                  test_clayton=np.array([]), exp_infall=np.array([]), m_inflow_in=np.array([]),\
-                 is_sub_array=np.array([])):
+                 is_sub_array=np.array([]),\
+                 inter_Z_points = np.array([]),\
+                 nb_inter_Z_points = np.array([]), y_coef_M = np.array([]),\
+                 y_coef_M_ej = np.array([]), y_coef_Z_aM = np.array([]),\
+                 y_coef_Z_bM = np.array([]), y_coef_Z_bM_ej = np.array([]),\
+                 tau_coef_M = np.array([]), tau_coef_M_inv = np.array([]),\
+                 tau_coef_Z_aM = np.array([]), tau_coef_Z_bM = np.array([]),\
+                 tau_coef_Z_aM_inv = np.array([]), tau_coef_Z_bM_inv = np.array([]),\
+                 y_coef_M_pop3 = np.array([]), y_coef_M_ej_pop3 = np.array([]),\
+                 tau_coef_M_pop3 = np.array([]), tau_coef_M_pop3_inv = np.array([]),\
+                 inter_lifetime_points_pop3=np.array([]),\
+                 inter_lifetime_points_pop3_tree=np.array([]),\
+                 nb_inter_lifetime_points_pop3=np.array([]),\
+                 inter_lifetime_points=np.array([]),inter_lifetime_points_tree=np.array([]),\
+                 nb_inter_lifetime_points=np.array([]), nb_inter_M_points_pop3=np.array([]),\
+                 inter_M_points_pop3_tree=np.array([]), nb_inter_M_points=np.array([]),\
+                 inter_M_points=np.array([]), y_coef_Z_aM_ej=np.array([])):
 
         print('This is the testing JINAPY version')
         # Announce the beginning of the simulation
@@ -136,6 +152,19 @@ class omega_plus():
             print ('OMEGA+ run in progress..')
         start_time = t_module.time()
         self.start_time = start_time
+
+        # Print parameters if asked for ..
+        if print_param:
+            dicto = locals()
+            for key in dicto.keys():
+                try:
+                    if len(dicto[key]) > 0:
+                        pass
+                except TypeError:
+                    print(key,'=',dicto[key])
+                except:
+                    raise
+                
 
         # Set the initial mass of the inner reservoir
         if mgal > 0.0:
@@ -190,7 +219,26 @@ class omega_plus():
             ytables_1a_radio_in=ytables_1a_radio_in,\
             ytables_nsmerger_radio_in=ytables_nsmerger_radio_in,\
             test_clayton=test_clayton, radio_refinement=radio_refinement,\
-            nsm_dtd_power=nsm_dtd_power)
+            nsm_dtd_power=nsm_dtd_power,\
+            inter_Z_points=inter_Z_points,\
+            nb_inter_Z_points=nb_inter_Z_points, y_coef_M=y_coef_M,\
+            y_coef_M_ej=y_coef_M_ej, y_coef_Z_aM=y_coef_Z_aM,\
+            y_coef_Z_bM=y_coef_Z_bM, y_coef_Z_bM_ej=y_coef_Z_bM_ej,\
+            tau_coef_M=tau_coef_M, tau_coef_M_inv=tau_coef_M_inv,\
+            tau_coef_Z_aM=tau_coef_Z_aM, tau_coef_Z_bM=tau_coef_Z_bM,\
+            tau_coef_Z_aM_inv=tau_coef_Z_aM_inv, tau_coef_Z_bM_inv=tau_coef_Z_bM_inv,\
+            y_coef_M_pop3=y_coef_M_pop3, y_coef_M_ej_pop3=y_coef_M_ej_pop3,\
+            tau_coef_M_pop3=tau_coef_M_pop3, tau_coef_M_pop3_inv=tau_coef_M_pop3_inv,\
+            inter_lifetime_points_pop3=inter_lifetime_points_pop3,\
+            inter_lifetime_points_pop3_tree=inter_lifetime_points_pop3_tree,\
+            nb_inter_lifetime_points_pop3=nb_inter_lifetime_points_pop3,\
+            inter_lifetime_points=inter_lifetime_points,\
+            inter_lifetime_points_tree=inter_lifetime_points_tree,\
+            nb_inter_lifetime_points=nb_inter_lifetime_points,\
+            nb_inter_M_points_pop3=nb_inter_M_points_pop3,\
+            inter_M_points_pop3_tree=inter_M_points_pop3_tree,\
+            nb_inter_M_points=nb_inter_M_points, inter_M_points=inter_M_points,\
+            y_coef_Z_aM_ej=y_coef_Z_aM_ej)
 
         # Parameters associated with OMEGA+
         self.m_outer_ini = m_outer_ini
@@ -877,7 +925,8 @@ class omega_plus():
             for jj in range(n_reacts):
                 prod_list = []
                 react_indx = decay_module.iso.reactions[targ_index][jj + 2] - 1
-                react_type = decay_module.iso.reaction_types[react_indx].decode('UTF-8')
+                #react_type = decay_module.iso.reaction_types[react_indx].decode('UTF-8')
+                react_type = decay_module.iso.reaction_types[react_indx]
 
                 # Apply the probability for this branch
                 rate_jj = rate * decay_module.iso.decay_constant[targ_index][jj + 1]
@@ -1029,9 +1078,12 @@ class omega_plus():
         # Reset the inflow and outflow rates to zero
         self.inner.m_outflow_t = np.zeros(self.inner.nb_timesteps)
         self.inner.m_inflow_t = np.zeros(self.inner.nb_timesteps)
+        continue_for_now = True
 
         # For each timestep (defined by the OMEGA instance) ...
         for i_step_OMEGA in range(0,i_up_temp):
+            if not continue_for_now:
+                break
 
             # Get convenient dt
             totDt = self.inner.history.timesteps[i_step_OMEGA]
@@ -1106,8 +1158,14 @@ class omega_plus():
 
             HH = totDt; newHH = HH
 
+            #print('While Loop - going IN')
             while totDt > 0:
+                #print(HH, totDt)
                 converged = True
+
+                if HH < 1.0e-20 and totDt > 1.0e-19:
+                    continue_for_now = False
+                    break
 
                 # Run the patankar algorithm for the substeps
                 err = []
@@ -1115,6 +1173,7 @@ class omega_plus():
                 t_m_cgm = []; t_m_cgm_radio = []
                 t_total_sfr = []; t_m_added = []; t_m_lost = []
 
+                #print('For Loop - going IN')
                 for ii in range(len(self.substeps)):
                     nn = self.substeps[ii]
                     fnn = float(nn)
@@ -1155,6 +1214,7 @@ class omega_plus():
 
                         if err[-1] < self.tolerance:
                             break
+                #print('For Loop - going OUT')
 
                 # Take solution
                 if len(err) > 0:
@@ -1193,6 +1253,9 @@ class omega_plus():
                 # Check that HH remains below totDt
                 if totDt < HH*1.1:
                     HH = totDt
+
+            #print('While Loop - going OUT')
+
 
             # Keep the lost and added values in memory
             self.inner.m_outflow_t[i_step_OMEGA] = total_m_lost
