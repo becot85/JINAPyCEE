@@ -30,30 +30,17 @@ notebookmode=True
 
 # Standard packages
 import numpy as np
-from imp import *
-from pylab import * 
 import time as t_module
-import copy
-import math
-import os
-import re
-import imp
-
 
 # Define where is the working directory
 # This is where the NuPyCEE code will be extracted
-global_path = './NuPyCEE/'
-
-# This is where the JINAPyCEE code will be extracted
-global_path_jinapycee=  './JINAPyCEE/'
+nupy_path = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+nupy_path = os.path.join(nupy_path, "NuPyCEE")
 
 # Import NuPyCEE and JINAPyCEE codes
 import NuPyCEE.read_yields as ry
 import NuPyCEE.omega as omega
 import JINAPyCEE.omega_plus as omega_plus
-#ry = imp.load_source('read_yields', global_path+'read_yields.py')
-#omega = imp.load_source('omega', global_path+'omega.py')
-#omega_plus = imp.load_source('omega_plus', global_path_jinapycee+'omega_plus.py')
 
 #####################
 # Class Declaration #
@@ -298,7 +285,7 @@ class gamma():
         # Get the primordial composition (mass fraction)
         iniabu_table = 'yield_tables/iniabu/iniab_bb_walker91.txt'
         ytables_bb = ry.read_yield_sn1a_tables( \
-            global_path+iniabu_table, self.o_ini.history.isotopes)
+            os.path.join(nupy_path, iniabu_table), self.o_ini.history.isotopes)
         self.prim_x_frac = np.array(ytables_bb.get(quantity='Yields'))
         del ytables_bb
 
