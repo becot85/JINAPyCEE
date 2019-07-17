@@ -39,13 +39,9 @@ The inner region is represented by an OMEGA simulation:
 
 # Standard packages
 import numpy as np
-from pylab import * 
 import time as t_module
 import copy
 import os
-
-global notebookmode
-notebookmode=True
 
 # Define where is the working directory
 # This is where the NuPyCEE code will be extracted
