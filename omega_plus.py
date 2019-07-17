@@ -1158,9 +1158,7 @@ class omega_plus():
 
             HH = totDt; newHH = HH
 
-            #print('While Loop - going IN')
             while totDt > 0:
-                #print(HH, totDt)
                 converged = True
 
                 if HH < 1.0e-20 and totDt > 1.0e-19:
@@ -1355,11 +1353,11 @@ class omega_plus():
 
             # Calculate the total current gas mass in the inner region
             current_mgal = np.sum(isot_mgal)
-            inv_mass = 1 / current_mgal
+            inv_mass = 1 / (current_mgal + self.min_val)
 
             # Calculate the total current gas mass in the outer region
             current_mcgm = np.sum(isot_mcgm)
-            inv_mass_cgm = 1 / current_mcgm
+            inv_mass_cgm = 1 / (current_mcgm + self.min_val)
 
             # Calculate the star formation rate [Msun/yr]
             sfr_temp = self.__get_SFR(i_step_OMEGA, current_mgal, dtt)
@@ -1887,8 +1885,12 @@ class omega_plus():
 
 
             # In OMEGA, R_vir is in [kpc] while in Crosby+15 R_vir is in [Mpc]
-            m_lost = self.gamma_cte * self.nb_ccsne[i_step_OMEGA] * \
-                self.epsilon_sne_halo * (r_vir_temp*0.001 / m_DM_temp)**self.halo_out_index
+            if self.epsilon_sne_halo < 0:
+                m_lost = 0
+            else:
+                m_lost = self.gamma_cte * self.nb_ccsne[i_step_OMEGA] * \
+                    self.epsilon_sne_halo * \
+                    (r_vir_temp*0.001 / m_DM_temp)**self.halo_out_index
 
         # Return the halo outflow rate [Msun/yr]
         if dtt > 0:
