@@ -30,7 +30,7 @@ def fill_branch_info(br_halo_ID, br_age, br_z, br_m_halo,
     """
     Fill the halo ID, age, and mass of the current halo in a branch.
     """
-    
+
     # Copy the halo ID
     br_halo_ID[iz][-1].append(hid)
 
@@ -60,7 +60,7 @@ def convert_tree(hpath, tree, treeoutputpath, verbose=True):
     if verbose: print "  Time to precompute tree maps: {:.1f}".format(time.time()-start); sys.stdout.flush()
     num_nodes_in_tree = len(tree.data)
     num_nodes_processed = 0
-    
+
     ## This gets the scale factors etc for Caterpillar
     snaps = np.unique(tree["snap"])
     times = haloutils.get_t_snap(hpath,snaps)*1e9 #Gyr
@@ -91,7 +91,7 @@ def convert_tree(hpath, tree, treeoutputpath, verbose=True):
         br_r_vir.append([])
         br_is_sub.append([])
         br_is_prim.append([])
-        
+
     start = time.time()
     ## Loop through all nodes of the tree that are branch points
     for irow,row in enumerate(tree.data):
@@ -107,15 +107,15 @@ def convert_tree(hpath, tree, treeoutputpath, verbose=True):
         br_m_halo[i_z].append([])
         br_r_vir[i_z].append([])
         br_is_sub[i_z].append([])
-        
+
         ## Assign whether or not this is a primordial branch
         br_is_prim[i_z].append(row["num_prog"] == 0)
-        
+
         ## Fill the start of the branch
         ## Fill the halo ID, age, mass, and radius
         # Note: the ID is the mtid!!! not sure if this is what we actually want
         # To access that object in the halo catalogs, we need origid and snapshot
-        fill_branch_info(br_halo_ID, br_age, br_z, br_m_halo, br_r_vir, 
+        fill_branch_info(br_halo_ID, br_age, br_z, br_m_halo, br_r_vir,
                          row["id"], i_z, i_z, times, redshifts, row, br_is_sub)
         num_nodes_processed += 1
         ## Step down the tree
@@ -126,14 +126,14 @@ def convert_tree(hpath, tree, treeoutputpath, verbose=True):
         while desc_row["num_prog"] == 1:
             ## Fill next part of the branch
             i_z_cur = snaps.index(desc_row["snap"])
-            fill_branch_info(br_halo_ID, br_age, br_z, br_m_halo, br_r_vir, 
+            fill_branch_info(br_halo_ID, br_age, br_z, br_m_halo, br_r_vir,
                              desc_row["id"], i_z, i_z_cur, times, redshifts, desc_row, br_is_sub)
             num_nodes_processed += 1
             ## Step down the tree
             desc_irow = tree.getDesc(desc_irow, desc_map)
             if desc_irow is None: break # reached the root
             desc_row = tree[desc_irow]
-                
+
         # Calculate the time before merger
         i_z_last = snaps.index(desc_row["snap"])
         br_t_merge[i_z][-1] = times[i_z_last] - times[i_z]
@@ -142,12 +142,11 @@ def convert_tree(hpath, tree, treeoutputpath, verbose=True):
     if verbose: print "  Time to convert: {:.1f}".format(time.time()-start); sys.stdout.flush()
     if num_nodes_processed != num_nodes_in_tree:
         raise ValueError("ERROR! num nodes processed != num nodes in tree ({} != {})".format(num_nodes_processed, num_nodes_in_tree))
-        
-    
+
     start = time.time()
     np.save(treeoutputpath,[br_halo_ID, br_age, br_z, br_t_merge, br_ID_merge, \
                             br_m_halo, br_r_vir, br_is_prim, redshifts, times, tree[0]['id'], br_is_sub])
-    if verbose: 
+    if verbose:
         print "  Time to save: {:.1f}".format(time.time()-start); sys.stdout.flush()
         print
 
@@ -158,7 +157,7 @@ def convert_all_trees(hid, lx, Mpeakmin):
     if not os.path.exists(halodir):
         print halodir,"does not exist, creating"
         os.makedirs(halodir)
-        
+
     start = time.time()
     hpath = haloutils.get_hpath_lx(hid, lx)
     zoomid = haloutils.load_zoomid(hpath)
@@ -166,7 +165,7 @@ def convert_all_trees(hid, lx, Mpeakmin):
     arbor = haloutils.load_zoom_mtc(hpath, indexbyrsid=True)
     print "Time to load catalog: {:.1f}".format(time.time()-start); sys.stdout.flush()
     print
-    
+
     num_trees_tried = 0
     num_trees_written = 0
     startall = time.time()
@@ -199,4 +198,4 @@ if __name__=="__main__":
     for lx in lxs:
         for hid in hids:
             convert_all_trees(hid, lx, Mpeakmin)
-    
+

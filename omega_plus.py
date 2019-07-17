@@ -151,7 +151,6 @@ class omega_plus():
                     print(key,'=',dicto[key])
                 except:
                     raise
-                
 
         # Set the initial mass of the inner reservoir
         if mgal > 0.0:
@@ -561,13 +560,13 @@ class omega_plus():
 
         # Assume an primordial composition (mass fraction) if not provided ..
         if len(self.outer_ini_f) == 0:
-            self.outer_ini_f = copy.deepcopy(self.prim_x_frac)
+            self.outer_ini_f = copy.copy(self.prim_x_frac)
 
         # Convert into NumPy array
         self.ymgal_outer = []
         self.ymgal_outer.append(np.array([]))
         self.ymgal_outer[0] = np.array(self.outer_ini_f)
-        
+
         # Create ymgal_outer_radio
         self.ymgal_outer_radio = []
         if self.inner.len_decay_file:
@@ -714,7 +713,7 @@ class omega_plus():
 
         # Dictionary from name to (z, n) and other direction
         zn_to_name = {}
- 
+
         # Shorten the name for self.inner.history.isotopes
         hist_isotopes = self.inner.history.isotopes
 
@@ -1093,11 +1092,11 @@ class omega_plus():
             m_added = ir_iso_temp * totDt
             sum_m_added = np.sum(m_added)
             if self.f_halo_to_gal_out >= 0.0:
-                self.m_lost_for_halo = copy.deepcopy(m_lost)
+                self.m_lost_for_halo = m_lost
 
             # Limit the inflow rate if needed (the outflow rate is considered in OMEGA)
             if sum_m_added > np.sum(self.ymgal_outer[i_step_OMEGA]):
-                m_added = copy.deepcopy(self.ymgal_outer[i_step_OMEGA])
+                m_added = copy.copy(self.ymgal_outer[i_step_OMEGA])
 
             # Recalculate ir_iso_temp
             ir_iso_temp = m_added / totDt
@@ -1150,7 +1149,6 @@ class omega_plus():
                 t_m_cgm = []; t_m_cgm_radio = []
                 t_total_sfr = []; t_m_added = []; t_m_lost = []
 
-                #print('For Loop - going IN')
                 for ii in range(len(self.substeps)):
                     nn = self.substeps[ii]
                     fnn = float(nn)
@@ -1231,9 +1229,6 @@ class omega_plus():
                 if totDt < HH*1.1:
                     HH = totDt
 
-            #print('While Loop - going OUT')
-
-
             # Keep the lost and added values in memory
             self.inner.m_outflow_t[i_step_OMEGA] = total_m_lost
             self.inner.m_inflow_t[i_step_OMEGA] = np.sum(total_m_added)
@@ -1261,7 +1256,7 @@ class omega_plus():
 
         # Evolve the stellar population only .. if a galaxy merger occured
         if self.t_merge > 0.0:
-                
+
             for i_step_last in range(i_step_OMEGA + 1, self.inner.nb_timesteps):
                 self.inner.run_step(i_step_last + 1, 0.0, no_in_out=True)
 
@@ -1292,7 +1287,7 @@ class omega_plus():
         for i_tot in range(0,len(self.inner.history.timesteps)):
             self.inner.m_stel_tot += self.inner.history.sfr_abs[i_tot] * \
                 self.inner.history.timesteps[i_tot]
-        if self.inner.m_stel_tot > 0.0:            
+        if self.inner.m_stel_tot > 0.0:
             self.inner.m_stel_tot = 1.0 / self.inner.m_stel_tot
         self.inner.f_m_stel_tot = []
         m_temp = 0.0
@@ -1483,7 +1478,7 @@ class omega_plus():
                         #m_gas_temp = m_gas_SFR
 
                 else:
-                    m_gas_temp = copy.deepcopy(m_gas_SFR)
+                    m_gas_temp = m_gas_SFR
 
                 # Interpolate SFE
                 if dtt > 0:
@@ -1539,7 +1534,7 @@ class omega_plus():
                         self.inner.m_DM_t_coef[i_step_OMEGA][1]
             else:
                 m_DM_t_temp = self.inner.m_DM_t[i_step_OMEGA]
- 
+
             # Calculate the mass-loading factor
             if self.C17_eta_z_dep:
 
@@ -1742,7 +1737,7 @@ class omega_plus():
             cooling_time = t_ff_temp
 
             #cooling_time = t_ff_temp * (544507042.254/self.inner.m_DM_t[i_step_OMEGA])**0.5
-            self.t_cool[i_step_OMEGA] = copy.deepcopy(cooling_time)
+            self.t_cool[i_step_OMEGA] = cooling_time
 
             # Calculate the total cooling rate [Msun/yr]
             cooling_rate = sum_ymgal_outer / cooling_time
@@ -1763,13 +1758,12 @@ class omega_plus():
                 t_ff_temp = self.t_ff_cte * self.f_t_ff * 0.1 * (1.0 + \
                     self.inner.redshift_t[i_step_OMEGA])**((-1.5)*self.t_ff_index) / \
                         self.inner.H_0 * 9.7759839e11
-            self.t_cool[i_step_OMEGA] = copy.deepcopy(t_ff_temp)
+            self.t_cool[i_step_OMEGA] = t_ff_temp
 
             # Return zero inflow rate
             iso_rate_temp = np.zeros(self.inner.nb_isotopes)
 
         return iso_rate_temp
- 
 
     ##############################################
     #         Get Rates for DM variation         #
