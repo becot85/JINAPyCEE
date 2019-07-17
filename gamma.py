@@ -25,9 +25,6 @@ Each branch is represented by an OMEGA_SAM or OMEGA simulation:
 
 '''
 
-global notebookmode
-notebookmode=True
-
 # Standard packages
 import numpy as np
 import time as t_module
