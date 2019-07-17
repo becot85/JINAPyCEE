@@ -13,7 +13,7 @@ Definitions
     Primordial halo : Halo that formed naturally, not from a merger
     Branch : Evolution of dark matter without merger (series of halos)
     Merger : Merger of two or more branches
-    
+
     A branch typically contains many halos, since the "same" halo has
     different identification for each redshift.. even if no merger occured.
 
@@ -99,7 +99,7 @@ class gamma():
             print ('Error - GAMMA needs the tree_trunk_ID parameter.')
             return
 
-        # Announce the beginning of the simulation 
+        # Announce the beginning of the simulation
         print ('GAMMA run in progress..')
         start_time = t_module.time()
         self.start_time = start_time
@@ -418,8 +418,8 @@ class gamma():
     def __correct_initial_state(self, i_z_ss, i_br_ss, dm_comb, dm_ini):
 
         '''
-        Add primordial gas if their is more dark matter than 
-        the sum of all pregenitors' dark matter mass. Gas is 
+        Add primordial gas if their is more dark matter than
+        the sum of all pregenitors' dark matter mass. Gas is
         removed if less dark matter.
 
         Arguments
@@ -532,7 +532,7 @@ class gamma():
             #else:
             #    outer += self.galaxy_inst[iz][ibr].ymgal_outer[\
             #       self.galaxy_inst[iz][ibr].inner.i_t_merger+1]
-            
+
             # For every step starting from the merging point ...
             for i_step_om in range(0,array_len):
 
@@ -618,7 +618,7 @@ class gamma():
         if self.br_ID_merge[i_z_ss][i_br_ss] == self.tree_trunk_id:
 
             # No merger
-            # The '-1.0' is because i_t_merger in OMEGA needs to 
+            # The '-1.0' is because i_t_merger in OMEGA needs to
             # be the last timestep.  The calculation of i_t_merge
             # workds by scanning 't' until 't' > t_merge.  To avoid
             # index out of bound error, the '-1.0' is needed.
@@ -645,7 +645,7 @@ class gamma():
             if max_sfe > 0.0:
                 br_sfe_t_temp = [max_sfe]*self.len_br_sfe_t
             else:
-                br_sfe_t_temp = np.array([])    
+                br_sfe_t_temp = np.array([])
         else:
             br_sfe_t_temp = np.array([])
 
@@ -722,7 +722,6 @@ class gamma():
             inter_M_points=self.o_ini.inter_M_points,\
             substeps=self.substeps,tolerance=self.tolerance,\
             min_val=self.min_val,y_coef_Z_aM_ej=self.o_ini.y_coef_Z_aM_ej)
-
 
     ##############################################
     #                  Get Time                  #
