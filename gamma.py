@@ -39,6 +39,7 @@ import NuPyCEE.read_yields as ry
 import NuPyCEE.omega as omega
 import JINAPyCEE.omega_plus as omega_plus
 
+
 #####################
 # Class Declaration #
 #####################
@@ -67,17 +68,19 @@ class gamma():
                  popIII_info_fast=True, t_sf_z_dep = 1.0, m_crit_on=False, norm_crit_m=8.0e+09, \
                  mass_frac_SSP=0.5, imf_rnd_sampling=False, cte_m_gas = -1.0, \
                  omega_dur=-1.0, tree_trunk_ID=-1, halo_in_out_on=True, \
-                 pre_calculate_SSPs=False, gal_out_index=1.0, yield_tables_dir='', \
-                 epsilon_sne_halo=-1, nb_ccsne_per_m=0.01, epsilon_sne_gal=-1, \
+                 pre_calculate_SSPs=False, gal_out_index=1.0, \
+                 epsilon_sne_halo=0.0, nb_ccsne_per_m=0.01, epsilon_sne_gal=-1, \
                  sfe_m_index=1.0, halo_out_index=1.0, sfe_m_dep=False, \
                  DM_outflow_C17=False, m_cold_flow_tresh=-1, C17_eta_z_dep=True, \
                  f_halo_to_gal_out=-1, beta_crit=1.0, Grackle_on=True, \
                  f_t_ff=1.0, mvir_sf_tresh=-1, t_inflow=-1.0, t_ff_index=1.0, \
+                 substeps = [2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64, 96, 128, 192, 256, 384],\
+                 tolerance = 1e-5, min_val = 1e-20,\
                  br_is_SF_t=np.array([]), br_r_vir=np.array([]), \
                  dt_in_SSPs=np.array([]), SSPs_in=np.array([]), \
                  M_array=np.array([]), ytables_in=np.array([]), \
-                 zm_lifetime_grid_nugrid_in=np.array([]), isotopes_in=np.array([]), \
-                 ytables_pop3_in=np.array([]), zm_lifetime_grid_pop3_in=np.array([]), \
+                 isotopes_in=np.array([]), \
+                 ytables_pop3_in=np.array([]), \
                  ytables_1a_in=np.array([]), ytables_nsmerger_in=np.array([]),\
                  dt_in=np.array([]), dt_split_info=np.array([]), ej_massive=np.array([]), \
                  ej_agb=np.array([]), ej_sn1a=np.array([]), ej_massive_coef=np.array([]),\
@@ -167,10 +170,8 @@ class gamma():
         self.cte_m_gas = cte_m_gas
         self.omega_dur = omega_dur
         self.ytables_in = ytables_in
-        self.zm_lifetime_grid_nugrid_in = zm_lifetime_grid_nugrid_in
         self.isotopes_in = isotopes_in
         self.ytables_pop3_in = ytables_pop3_in
-        self.zm_lifetime_grid_pop3_in = zm_lifetime_grid_pop3_in
         self.ytables_1a_in = ytables_1a_in
         self.ytables_nsmerger_in = ytables_nsmerger_in
         self.dt_in = dt_in
@@ -205,7 +206,9 @@ class gamma():
         self.f_t_ff = f_t_ff
         self.t_inflow = t_inflow
         self.t_ff_index = t_ff_index
-        self.yield_tables_dir = yield_tables_dir
+        self.substeps = substeps
+        self.tolerance = tolerance
+        self.min_val = min_val
 
         # Keep the GAMMA parameters in memory
         self.tree_trunk_id = tree_trunk_ID
@@ -260,7 +263,7 @@ class gamma():
         #print ('Should add the r-process tables, extra_yields_table, etc...')
         self.o_ini = omega.omega(table=self.table, pop3_table=self.pop3_table,\
                                  special_timesteps=2, cte_sfr=0.0, mgal=1e10,\
-                                 print_off=self.print_off, yield_tables_dir=self.yield_tables_dir)
+                                 print_off=self.print_off)
 
         # Calculate the number of redshifts
         self.nb_redshifts = len(self.redshifts)
@@ -676,16 +679,13 @@ class gamma():
             SSPs_in=self.SSPs_in, halo_out_index=self.halo_out_index,\
             print_off=self.print_off, long_range_ref=self.long_range_ref,\
             calc_SSP_ej=self.calc_SSP_ej, input_yields=True, \
-            yield_tables_dir=self.yield_tables_dir, \
             gal_out_index=self.gal_out_index, f_halo_to_gal_out=self.f_halo_to_gal_out, \
             popIII_info_fast=self.popIII_info_fast, t_sf_z_dep=self.t_sf_z_dep, \
             m_crit_on=self.m_crit_on, norm_crit_m=self.norm_crit_m,\
             t_nsm_coal=self.t_nsm_coal, imf_rnd_sampling=self.imf_rnd_sampling,\
             DM_array=self.DM_array, ism_ini=self.ism_ini, mdot_ini=self.mdot_ini, \
-            mdot_ini_t=self.mdot_ini_t, ytables_in=self.o_ini.ytables,\
-            zm_lifetime_grid_nugrid_in=self.o_ini.zm_lifetime_grid_nugrid,\
-            isotopes_in=self.o_ini.history.isotopes, ytables_pop3_in=self.o_ini.ytables_pop3,\
-            zm_lifetime_grid_pop3_in=self.o_ini.zm_lifetime_grid_pop3,\
+            mdot_ini_t=self.mdot_ini_t, ytables_in=self.o_ini.ytables, \
+            isotopes_in=self.o_ini.history.isotopes,\
             ytables_1a_in=self.o_ini.ytables_1a, dt_in=self.dt_in,\
             dt_split_info=self.dt_split_info, ej_massive=self.ej_massive,\
             ej_agb=self.ej_agb, ej_sn1a=self.ej_sn1a, ej_massive_coef=self.ej_massive_coef,\
@@ -700,8 +700,29 @@ class gamma():
             m_cold_flow_tresh=self.m_cold_flow_tresh, C17_eta_z_dep=self.C17_eta_z_dep, \
             r_vir_array=self.r_vir_array, dmo_ini=self.dmo_ini, dmo_ini_t=self.dmo_ini_t, \
             f_t_ff=self.f_t_ff, Grackle_on=self.Grackle_on, t_inflow=self.t_inflow, \
-            t_ff_index=self.t_ff_index, is_sub_array=self.is_sub_array)
-            
+            t_ff_index=self.t_ff_index, is_sub_array=self.is_sub_array, \
+            inter_Z_points=self.o_ini.inter_Z_points, nb_inter_Z_points=self.o_ini.nb_inter_Z_points,\
+            y_coef_M=self.o_ini.y_coef_M, y_coef_M_ej=self.o_ini.y_coef_M_ej,\
+            y_coef_Z_aM=self.o_ini.y_coef_Z_aM, y_coef_Z_bM=self.o_ini.y_coef_Z_bM,\
+            y_coef_Z_bM_ej=self.o_ini.y_coef_Z_bM_ej, tau_coef_M=self.o_ini.tau_coef_M,\
+            tau_coef_M_inv=self.o_ini.tau_coef_M_inv, tau_coef_Z_aM=self.o_ini.tau_coef_Z_aM,\
+            tau_coef_Z_bM=self.o_ini.tau_coef_Z_bM, tau_coef_Z_aM_inv=self.o_ini.tau_coef_Z_aM_inv,\
+            tau_coef_Z_bM_inv=self.o_ini.tau_coef_Z_bM_inv, y_coef_M_pop3=self.o_ini.y_coef_M_pop3,\
+            y_coef_M_ej_pop3=self.o_ini.y_coef_M_ej_pop3, tau_coef_M_pop3=self.o_ini.tau_coef_M_pop3,\
+            tau_coef_M_pop3_inv=self.o_ini.tau_coef_M_pop3_inv,\
+            inter_lifetime_points_pop3=self.o_ini.inter_lifetime_points_pop3,\
+            inter_lifetime_points_pop3_tree=self.o_ini.inter_lifetime_points_pop3_tree,\
+            nb_inter_lifetime_points_pop3=self.o_ini.nb_inter_lifetime_points_pop3,\
+            inter_lifetime_points=self.o_ini.inter_lifetime_points,\
+            inter_lifetime_points_tree=self.o_ini.inter_lifetime_points_tree,\
+            nb_inter_lifetime_points=self.o_ini.nb_inter_lifetime_points,\
+            nb_inter_M_points_pop3=self.o_ini.nb_inter_M_points_pop3,\
+            inter_M_points_pop3_tree=self.o_ini.inter_M_points_pop3_tree,\
+            nb_inter_M_points=self.o_ini.nb_inter_M_points,\
+            inter_M_points=self.o_ini.inter_M_points,\
+            substeps=self.substeps,tolerance=self.tolerance,\
+            min_val=self.min_val,y_coef_Z_aM_ej=self.o_ini.y_coef_Z_aM_ej)
+
 
     ##############################################
     #                  Get Time                  #
