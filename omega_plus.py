@@ -1064,12 +1064,9 @@ class omega_plus():
         # Reset the inflow and outflow rates to zero
         self.inner.m_outflow_t = np.zeros(self.inner.nb_timesteps)
         self.inner.m_inflow_t = np.zeros(self.inner.nb_timesteps)
-        continue_for_now = True
 
         # For each timestep (defined by the OMEGA instance) ...
         for i_step_OMEGA in range(0,i_up_temp):
-            if not continue_for_now:
-                break
 
             # Get convenient dt
             totDt = self.inner.history.timesteps[i_step_OMEGA]
@@ -1146,10 +1143,6 @@ class omega_plus():
 
             while totDt > 0:
                 converged = True
-
-                if HH < 1.0e-20 and totDt > 1.0e-19:
-                    continue_for_now = False
-                    break
 
                 # Run the patankar algorithm for the substeps
                 err = []
@@ -1257,18 +1250,29 @@ class omega_plus():
                 #if not self.inner.pre_calculate_SSPs and sum_ymgal_radio > 1e-5:
                     #pass
 
-            # Evolve the stellar population only .. if a galaxy merger occured
-            if self.t_merge > 0.0:
-                for i_step_last in range(i_step_OMEGA + 1, self.inner.nb_timesteps):
-                    self.inner.run_step(i_step_last + 1, 0.0, no_in_out=True)
+            # Update original arrays
+            self.inner.history.sfr_abs[i_step_OMEGA] = final_sfr / self.inner.history.timesteps[i_step_OMEGA]
+            self.inner.m_outflow_t[i_step_OMEGA] = total_m_lost
+            self.inner.m_locked = final_sfr
 
             # Get the new metallicity of the gas and update history class
             self.inner.zmetal = self.inner._getmetallicity(i_step_OMEGA)
             self.inner._update_history(i_step_OMEGA)
 
-            # Update original arrays
-            self.inner.history.sfr_abs[i_step_OMEGA] = final_sfr / self.inner.history.timesteps[i_step_OMEGA]
-            self.inner.m_outflow_t[i_step_OMEGA] = total_m_lost
+        # Evolve the stellar population only .. if a galaxy merger occured
+        if self.t_merge > 0.0:
+                
+            for i_step_last in range(i_step_OMEGA + 1, self.inner.nb_timesteps):
+                self.inner.run_step(i_step_last + 1, 0.0, no_in_out=True)
+
+                # Update original arrays
+                self.inner.history.sfr_abs[i_step_OMEGA] = 0.0
+                self.inner.m_outflow_t[i_step_OMEGA] = 0.0
+                self.inner.m_locked = 0.0
+
+                # Get the new metallicity of the gas and update history class
+                self.inner.zmetal = self.inner._getmetallicity(i_step_OMEGA)
+                self.inner._update_history(i_step_OMEGA)
 
         # FINAL TIMESTEP  .. PUT THIS IN A FUNCTION
 
