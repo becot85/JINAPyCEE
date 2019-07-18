@@ -1,6 +1,6 @@
 '''
 
-Script to extract information from a consistent tree for 
+Script to extract information from a consistent tree for
 generating the input arrays used in GAMMA.
 
 BCOTE: July 2018
@@ -202,7 +202,7 @@ def get_branches(nodes, redshifts, times):
                     # Stop if the trunk is recovered ..
                     if node_search.is_root:
                         break
-                    
+
                     # Go to the next children/descendent
                     node_search = node_search.descendent
 

@@ -1,12 +1,17 @@
+# coding=utf-8
 from __future__ import (division, print_function, absolute_import,
                         unicode_literals)
 
 '''
 
 OMEGA Plus, 2-zone model with a central galaxy sourrounded
-by a circumgalactic medium. 
+by a circumgalactic medium.
 
- - Feb2017: B. Cote
+FEB2017: B. Cote
+- Creation of the code
+
+FEB2019: A. Yagüe, B. Cote
+- Optimized to code to run faster
 
 
 Definitions
@@ -34,39 +39,19 @@ The inner region is represented by an OMEGA simulation:
 
 # Standard packages
 import numpy as np
-from imp import *
-from pylab import * 
 import time as t_module
 import copy
-import math
 import os
-import re
 
-# Import the class that reads the input yield tables
-try:
-    from NuPyCEE import read_yields as ry
-    # Import the OMEGA module
-    from NuPyCEE import omega
-except ValueError:
-    import read_yields as ry
-    import omega
+# Define where is the working directory
+# This is where the NuPyCEE code will be extracted
+nupy_path = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+nupy_path = os.path.join(nupy_path, "NuPyCEE")
 
-# Import modules for Grackle (gas cooling)
-#import yt
-#from pygrackle import chemistry_data, setup_fluid_container
-#from pygrackle.utilities.physical_constants import \
-#mass_hydrogen_cgs, sec_per_Myr, cm_per_mpc, sec_per_Gyr
-
-# SYGMADIR needs to point to the SYGMA directory
-global notebookmode
-notebookmode=True
-global global_path
-try:
-    if os.environ['SYGMADIR']:
-        global_path=os.environ['SYGMADIR']
-except KeyError:
-    global_path=os.getcwd()
-global_path=global_path+'/'
+# Import NuPyCEE codes
+import NuPyCEE.read_yields as ry
+import NuPyCEE.omega as omega
+import NuPyCEE.decay_module as decay_module
 
 
 #####################
@@ -99,12 +84,14 @@ class omega_plus():
                  input_yields=False, popIII_info_fast=True, t_sf_z_dep=1.0, m_crit_on=False, \
                  norm_crit_m=8.0e+09, mass_frac_SSP=0.5, imf_rnd_sampling=False, \
                  halo_in_out_on=True, pre_calculate_SSPs=False, m_outer_ini=-1.0, \
-                 epsilon_sne_halo=-1, nb_ccsne_per_m=0.01, epsilon_sne_gal=-1, \
+                 epsilon_sne_halo=0.0, nb_ccsne_per_m=0.01, epsilon_sne_gal=-1, \
                  sfe_m_index=1.0, halo_out_index=1.0, is_SF=True, sfe_m_dep=False, \
                  gal_out_index=1.0, f_halo_to_gal_out=-1, beta_crit=1.0, \
                  DM_outflow_C17=False, m_cold_flow_tresh=-1, C17_eta_z_dep=True, \
                  Grackle_on=False, f_t_ff=1.0, t_inflow=-1.0, t_ff_index=1.0, \
-                 use_decay_module=False, yield_tables_dir='',\
+                 use_decay_module=False, max_half_life=1e14, min_half_life=1000,\
+                 substeps = [2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64, 96, 128, 192, 256, 384],\
+                 tolerance = 1e-5, min_val = 1e-20, print_param=False,\
                  delayed_extra_log=False, delayed_extra_yields_log_int=False, \
                  r_vir_array=np.array([]), nsm_dtd_power=np.array([]), \
                  dt_in_SSPs=np.array([]), SSPs_in=np.array([]), is_SF_t=np.array([]), \
@@ -129,14 +116,41 @@ class omega_plus():
                  ytables_radio_in=np.array([]), radio_iso_in=np.array([]), \
                  ytables_1a_radio_in=np.array([]), ytables_nsmerger_radio_in=np.array([]),\
                  test_clayton=np.array([]), exp_infall=np.array([]), m_inflow_in=np.array([]),\
-                 is_sub_array=np.array([])):
+                 is_sub_array=np.array([]),\
+                 inter_Z_points = np.array([]),\
+                 nb_inter_Z_points = np.array([]), y_coef_M = np.array([]),\
+                 y_coef_M_ej = np.array([]), y_coef_Z_aM = np.array([]),\
+                 y_coef_Z_bM = np.array([]), y_coef_Z_bM_ej = np.array([]),\
+                 tau_coef_M = np.array([]), tau_coef_M_inv = np.array([]),\
+                 tau_coef_Z_aM = np.array([]), tau_coef_Z_bM = np.array([]),\
+                 tau_coef_Z_aM_inv = np.array([]), tau_coef_Z_bM_inv = np.array([]),\
+                 y_coef_M_pop3 = np.array([]), y_coef_M_ej_pop3 = np.array([]),\
+                 tau_coef_M_pop3 = np.array([]), tau_coef_M_pop3_inv = np.array([]),\
+                 inter_lifetime_points_pop3=np.array([]),\
+                 inter_lifetime_points_pop3_tree=np.array([]),\
+                 nb_inter_lifetime_points_pop3=np.array([]),\
+                 inter_lifetime_points=np.array([]),inter_lifetime_points_tree=np.array([]),\
+                 nb_inter_lifetime_points=np.array([]), nb_inter_M_points_pop3=np.array([]),\
+                 inter_M_points_pop3_tree=np.array([]), nb_inter_M_points=np.array([]),\
+                 inter_M_points=np.array([]), y_coef_Z_aM_ej=np.array([])):
 
-
-        # Announce the beginning of the simulation 
+        # Announce the beginning of the simulation
         if not print_off:
             print ('OMEGA+ run in progress..')
         start_time = t_module.time()
         self.start_time = start_time
+
+        # Print parameters if asked for ..
+        if print_param:
+            dicto = locals()
+            for key in dicto.keys():
+                try:
+                    if len(dicto[key]) > 0:
+                        pass
+                except TypeError:
+                    print(key,'=',dicto[key])
+                except:
+                    raise
 
         # Set the initial mass of the inner reservoir
         if mgal > 0.0:
@@ -146,7 +160,8 @@ class omega_plus():
 
         # Declare the inner region (OMEGA instance)
         self.inner = omega.omega(in_out_control=True, SF_law=False, DM_evolution=False, \
-            sfe=sfe, t_star=t_star, mass_loading=mass_loading, external_control=True, \
+            sfe=sfe, t_star=t_star, mass_loading=mass_loading, \
+            external_control=True, use_external_integration=True, \
             Z_trans=Z_trans, imf_type=imf_type, alphaimf=alphaimf, imf_bdys=imf_bdys, \
             sn1a_rate=sn1a_rate, iniZ=iniZ, dt=dt, special_timesteps=special_timesteps, \
             tend=tend, mgal=the_mgal, transitionmass=transitionmass, table=table, \
@@ -163,7 +178,8 @@ class omega_plus():
             gauss_dtd=gauss_dtd, exp_dtd=exp_dtd, nb_1a_per_m=nb_1a_per_m, t_merge=t_merge, \
             imf_yields_range=imf_yields_range, exclude_masses=exclude_masses, \
             skip_zero=skip_zero, redshift_f=redshift_f, print_off=print_off, \
-            calc_SSP_ej=calc_SSP_ej, input_yields=input_yields, popIII_info_fast=popIII_info_fast, \
+            calc_SSP_ej=calc_SSP_ej, input_yields=input_yields, \
+            popIII_info_fast=popIII_info_fast, \
             t_sf_z_dep=t_sf_z_dep, mass_frac_SSP=mass_frac_SSP, t_nsm_coal=t_nsm_coal, \
             imf_rnd_sampling=imf_rnd_sampling, ism_ini=ism_ini, mdot_ini=mdot_ini, \
             mdot_ini_t=mdot_ini_t, ytables_in=ytables_in, DM_array=DM_array, \
@@ -174,20 +190,41 @@ class omega_plus():
             delayed_extra_log=delayed_extra_log,\
             delayed_extra_yields_log_int=delayed_extra_yields_log_int,\
             ej_massive=ej_massive, ej_agb=ej_agb, ej_sn1a=ej_sn1a, \
-            ej_massive_coef=ej_massive_coef, ej_agb_coef=ej_agb_coef, ej_sn1a_coef=ej_sn1a_coef, \
+            ej_massive_coef=ej_massive_coef, ej_agb_coef=ej_agb_coef, \
+            ej_sn1a_coef=ej_sn1a_coef, \
             mass_sampled=mass_sampled, scale_cor=scale_cor, m_DM_0=m_DM_0,\
             poly_fit_dtd_5th=poly_fit_dtd_5th, poly_fit_range=poly_fit_range,\
             pre_calculate_SSPs=pre_calculate_SSPs, dt_in_SSPs=dt_in_SSPs, SSPs_in=SSPs_in,\
-            use_decay_module=use_decay_module, yield_tables_dir=yield_tables_dir, \
+            use_decay_module=use_decay_module, \
             delayed_extra_dtd=delayed_extra_dtd, delayed_extra_dtd_norm=delayed_extra_dtd_norm, \
-            delayed_extra_yields=delayed_extra_yields, delayed_extra_yields_norm=delayed_extra_yields_norm, \
+            delayed_extra_yields=delayed_extra_yields, \
+            delayed_extra_yields_norm=delayed_extra_yields_norm, \
             delayed_extra_yields_radio=delayed_extra_yields_radio,\
             delayed_extra_yields_norm_radio=delayed_extra_yields_norm_radio,\
             ytables_radio_in=ytables_radio_in, radio_iso_in=radio_iso_in,\
             ytables_1a_radio_in=ytables_1a_radio_in,\
             ytables_nsmerger_radio_in=ytables_nsmerger_radio_in,\
             test_clayton=test_clayton, radio_refinement=radio_refinement,\
-            nsm_dtd_power=nsm_dtd_power)
+            nsm_dtd_power=nsm_dtd_power,\
+            inter_Z_points=inter_Z_points,\
+            nb_inter_Z_points=nb_inter_Z_points, y_coef_M=y_coef_M,\
+            y_coef_M_ej=y_coef_M_ej, y_coef_Z_aM=y_coef_Z_aM,\
+            y_coef_Z_bM=y_coef_Z_bM, y_coef_Z_bM_ej=y_coef_Z_bM_ej,\
+            tau_coef_M=tau_coef_M, tau_coef_M_inv=tau_coef_M_inv,\
+            tau_coef_Z_aM=tau_coef_Z_aM, tau_coef_Z_bM=tau_coef_Z_bM,\
+            tau_coef_Z_aM_inv=tau_coef_Z_aM_inv, tau_coef_Z_bM_inv=tau_coef_Z_bM_inv,\
+            y_coef_M_pop3=y_coef_M_pop3, y_coef_M_ej_pop3=y_coef_M_ej_pop3,\
+            tau_coef_M_pop3=tau_coef_M_pop3, tau_coef_M_pop3_inv=tau_coef_M_pop3_inv,\
+            inter_lifetime_points_pop3=inter_lifetime_points_pop3,\
+            inter_lifetime_points_pop3_tree=inter_lifetime_points_pop3_tree,\
+            nb_inter_lifetime_points_pop3=nb_inter_lifetime_points_pop3,\
+            inter_lifetime_points=inter_lifetime_points,\
+            inter_lifetime_points_tree=inter_lifetime_points_tree,\
+            nb_inter_lifetime_points=nb_inter_lifetime_points,\
+            nb_inter_M_points_pop3=nb_inter_M_points_pop3,\
+            inter_M_points_pop3_tree=inter_M_points_pop3_tree,\
+            nb_inter_M_points=nb_inter_M_points, inter_M_points=inter_M_points,\
+            y_coef_Z_aM_ej=y_coef_Z_aM_ej)
 
         # Parameters associated with OMEGA+
         self.m_outer_ini = m_outer_ini
@@ -225,6 +262,26 @@ class omega_plus():
         self.m_inflow_in = m_inflow_in
         self.len_m_inflow_in = len(m_inflow_in)
         self.is_sub_array = is_sub_array
+        self.max_half_life = max_half_life
+        self.min_half_life = min_half_life
+        self.substeps = substeps
+        self.tolerance = tolerance
+        self.min_val = min_val
+
+        # Get inflow rate if input array, and calculate the interpolation coefficients
+        if self.len_m_inflow_in > 0:
+            self.m_inflow_in_rate = np.zeros(self.inner.nb_timesteps)
+            self.m_inflow_in_rate_coef = np.zeros((self.inner.nb_timesteps,2))
+            for i_t in range(self.inner.nb_timesteps):
+                self.m_inflow_in_rate[i_t] = self.m_inflow_in[i_t]/\
+                           self.inner.history.timesteps[i_t]
+            for i_t in range(self.inner.nb_timesteps-1):
+                self.m_inflow_in_rate_coef[i_t][0] = (self.m_inflow_in_rate[i_t+1] - \
+                    self.m_inflow_in_rate[i_t]) / self.inner.history.timesteps[i_t]
+                self.m_inflow_in_rate_coef[i_t][1] = self.m_inflow_in_rate[i_t] - \
+                    self.m_inflow_in_rate_coef[i_t][0] * self.inner.history.age[i_t]
+            self.m_inflow_in_rate_coef[-1][0] = self.m_inflow_in_rate_coef[-2][0]
+            self.m_inflow_in_rate_coef[-1][1] = self.m_inflow_in_rate_coef[-2][1]
 
         # If the sub-halo information is provided ..
         if len(self.is_sub_array) > 0:
@@ -258,9 +315,9 @@ class omega_plus():
         self.km_to_Mpc = 3.24077929e-20
 
         # Calculate the primordial composition (mass fraction) for inflows ..
-        iniabu_table = 'yield_tables/iniabu/iniab_bb_walker91.txt'
+        iniabu_table = os.path.join("yield_tables", "iniabu", "iniab_bb_walker91.txt")
         ytables_bb = ry.read_yield_sn1a_tables( \
-            global_path+iniabu_table, self.inner.history.isotopes)
+            os.path.join(nupy_path, iniabu_table), self.inner.history.isotopes)
         self.prim_x_frac = ytables_bb.get(quantity='Yields')
         del ytables_bb
 
@@ -287,8 +344,6 @@ class omega_plus():
 
         # Initialize Grackle for gas cooling
         self.t_cool = np.zeros(self.inner.nb_timesteps)
-        #if self.Grackle_on:
-        #    self.__initialize_Grackle()
 
         # Declare the outer region
         self.__declare_outer()
@@ -335,10 +390,6 @@ class omega_plus():
         # Run the simulation
         self.__start_simulation()
 
-        # Delete Grackle stuff ..
-        #if self.Grackle_on:
-        #    del self.my_chemistry
-
         # Announce the end of the simulation
         if not print_off:
             print ('   OMEGA+ run completed -',self.__get_time())
@@ -378,6 +429,17 @@ class omega_plus():
             for i_sfe in range(0,self.inner.nb_timesteps):
                 self.sfe[i_sfe] = self.inner.sfe
 
+        # Create the interpolation coefficients
+        # sfe = self.sfe_coef[0] * t + self.sfe_coef[1]
+        self.sfe_coef = np.zeros((self.inner.nb_timesteps,2))
+        for i_cmdt in range(self.inner.nb_timesteps-1):
+            self.sfe_coef[i_cmdt][0] = (self.sfe[i_cmdt+1] - \
+                self.sfe[i_cmdt]) / self.inner.history.timesteps[i_cmdt]
+            self.sfe_coef[i_cmdt][1] = self.sfe[i_cmdt] - \
+                self.sfe_coef[i_cmdt][0] * self.inner.history.age[i_cmdt]
+        self.sfe_coef[-1][0] = self.sfe_coef[-2][0]
+        self.sfe_coef[-1][1] = self.sfe_coef[-2][1]
+
 
     ##############################################
     #               Calculate SF t               #
@@ -407,6 +469,15 @@ class omega_plus():
                     self.inner.redshift_t[i_cSFt])**((-1.5)*self.inner.t_sf_z_dep) / \
                         self.inner.H_0 * 9.7759839e11
 
+        # Create the interpolation coefficients
+        # t_SF = self.inner.t_SF_t_coef[0] * t + self.inner.t_SF_t_coef[1]
+        self.inner.t_SF_t_coef = np.zeros((self.inner.nb_timesteps,2))
+        for i_cmdt in range(0, self.inner.nb_timesteps):
+            self.inner.t_SF_t_coef[i_cmdt][0] = (self.inner.t_SF_t[i_cmdt+1] - \
+                self.inner.t_SF_t[i_cmdt]) / self.inner.history.timesteps[i_cmdt]
+            self.inner.t_SF_t_coef[i_cmdt][1] = self.inner.t_SF_t[i_cmdt] - \
+                self.inner.t_SF_t_coef[i_cmdt][0] * self.inner.history.age[i_cmdt]
+
 
     ##############################################
     #             Calculate T_vir t              #
@@ -427,6 +498,15 @@ class omega_plus():
 
             # Calculate the virial temperature [K]
             self.T_vir_t[i_cSFt] = cte_T_vir_t * self.inner.v_vir_DM_t[i_cSFt]**2
+
+        # Create the interpolation coefficients
+        # T_vir = self.T_vir_t_coef[0] * t + self.T_vir_t_coef[1]
+        self.T_vir_t_coef = np.zeros((self.inner.nb_timesteps,2))
+        for i_cmdt in range(0, self.inner.nb_timesteps):
+            self.T_vir_t_coef[i_cmdt][0] = (self.T_vir_t[i_cmdt+1] - \
+                self.T_vir_t[i_cmdt]) / self.inner.history.timesteps[i_cmdt]
+            self.T_vir_t_coef[i_cmdt][1] = self.T_vir_t[i_cmdt] - \
+                self.T_vir_t_coef[i_cmdt][0] * self.inner.history.age[i_cmdt]
 
 
     ##############################################
@@ -453,40 +533,14 @@ class omega_plus():
             # Calculate 500 times the critical density
             self.rho_500_t[i_cSFt] = 500.0 * cte_rho_500_t * H_squared
 
-
-    ##############################################
-    #             Initialize Grackle             #
-    ##############################################
-#    def __initialize_Grackle(self):
-
-#        '''
-#        Set the cooling option for the Grackle code
-#
-#        '''
-
-#        # Set solver parameters
-#        self.my_chemistry = chemistry_data()
-#        self.my_chemistry.use_grackle = 1
-#        self.my_chemistry.with_radiative_cooling = 1
-#        self.my_chemistry.primordial_chemistry = 0 # specie
-#        self.my_chemistry.metal_cooling = 1
-#        self.my_chemistry.UVbackground = 0
-#        self.my_chemistry.self_shielding_method = 0
-#        self.grackle_dir = '/Users/benoitcote/Grackle/grackle/'
-
-#        # Set units
-#        self.my_chemistry.comoving_coordinates = 0 # proper units
-#        self.my_chemistry.a_units = 1.0
-#        self.my_chemistry.density_units = mass_hydrogen_cgs # rho = 1.0 is 1.67e-24 g
-#        self.my_chemistry.length_units = cm_per_mpc         # 1 Mpc in cm
-#        self.my_chemistry.time_units = sec_per_Myr          # 1 Myr in s
-
-#        # Create array to keep track of the cooling rates
-#        self.cooling_rate = np.zeros(self.inner.nb_timesteps)
-
-#        # Choose Cloudy data
-#        self.my_chemistry.grackle_data_file = os.sep.join(
-#            [self.grackle_dir, 'input', 'CloudyData_noUVB.h5'])
+        # Create the interpolation coefficients
+        # rho_500_t = self.rho_500_t_coef[0] * t + self.rho_500_t_coef[1]
+        self.rho_500_t_coef = np.zeros((self.inner.nb_timesteps,2))
+        for i_cmdt in range(0, self.inner.nb_timesteps):
+            self.rho_500_t_coef[i_cmdt][0] = (self.rho_500_t[i_cmdt+1] - \
+                self.rho_500_t[i_cmdt]) / self.inner.history.timesteps[i_cmdt]
+            self.rho_500_t_coef[i_cmdt][1] = self.rho_500_t[i_cmdt] - \
+                self.rho_500_t_coef[i_cmdt][0] * self.inner.history.age[i_cmdt]
 
 
     ##############################################
@@ -506,12 +560,19 @@ class omega_plus():
 
         # Assume an primordial composition (mass fraction) if not provided ..
         if len(self.outer_ini_f) == 0:
-            self.outer_ini_f = copy.deepcopy(self.prim_x_frac)
+            self.outer_ini_f = copy.copy(self.prim_x_frac)
 
-        # Convert into NumPy arrayay
+        # Convert into NumPy array
         self.ymgal_outer = []
         self.ymgal_outer.append(np.array([]))
         self.ymgal_outer[0] = np.array(self.outer_ini_f)
+
+        # Create ymgal_outer_radio
+        self.ymgal_outer_radio = []
+        if self.inner.len_decay_file:
+            self.ymgal_outer_radio.append(np.array([0.0]*self.inner.nb_radio_iso))
+        else:
+            self.ymgal_outer_radio.append(np.array([0.0]))
 
         # If the total mass of the outer region is not provided ..
         if self.m_outer_ini <= 0.0:
@@ -525,6 +586,11 @@ class omega_plus():
         # Create the next timesteps (+1 to get the final state of the last dt)
         for i_do in range(1, self.inner.nb_timesteps+1):
             self.ymgal_outer.append(np.array([0.0]*self.inner.nb_isotopes))
+            if self.inner.len_decay_file:
+                self.ymgal_outer_radio.append(np.array([0.0] * \
+                        self.inner.nb_radio_iso))
+            else:
+                self.ymgal_outer_radio.append(np.array([0.0]))
 
         # Declare the total mass array
         self.sum_ymgal_outer = [0.0] * (self.inner.nb_timesteps+1)
@@ -557,7 +623,7 @@ class omega_plus():
 
             dmo_ini has an extra slot in the isotopes for the time,
             which is t = 0.0 for i_ext = 0.
-         
+
         '''
 
         # For every merging galaxy (every branch of a merger tree)
@@ -603,7 +669,7 @@ class omega_plus():
                 while t_cur < t_ext:
 
                     # Calculate the overlap time between ext. and cur. bins
-                    dt_trans = t_cur - max([t_ext_prev, t_cur_prev]) 
+                    dt_trans = t_cur - max([t_ext_prev, t_cur_prev])
 
                     # Calculate the mass fraction that needs to be transfered
                     f_dt = dt_trans / (t_ext - t_ext_prev)
@@ -621,100 +687,374 @@ class omega_plus():
 
 
     ##############################################
-    #            Define SF Timeframes            #
+    #         Create reaction network            #
     ##############################################
-#    def __define_SF_timeframes(self):
+    def __create_reac_dictionary(self):
 
-#        '''
-#        Define the timesteps where SF is allowed. When it is not
-#        allowed, there is no star formation (but there is inflow). Stars
-#        still releases their ejecta and the halo still gets corrected
-#        by the DM mass evolution. The is_SF_t needs to start with t=0.
-#
-#        '''
+        '''
+        This function creates the network for the decays. It depends on which
+        options are active for omega.
 
-#        for iii in range(self.inner.nb_timesteps):
-#            self.sfe[iii] = self.sfe_t[0]
+        '''
 
-        # Declare the current OMEGA age
-#        t_O_up = 0.0
+        # Reaction network dictionary
+        self.reac_dictionary = {}
 
-        # Declare current input timeframe step
-#        i_in_temp = 0
+        # If there is not decay, return now
+        if self.inner.len_decay_file == 0:
+            return
 
-        # Add an input timestep to cover all OMEGA timesteps
-#        self.is_SF_t[0].append(self.inner.history.tend*1.1)
-#        self.is_SF_t[1].append(self.is_SF_t[1][-1])
-#        if self.treat_sfe_t:
-#            self.sfe_t.append(self.sfe_t[-1])
-#        if self.treat_sfh_with_sfe:
-#            self.sfh_with_sfe.append(self.sfh_with_sfe[-1])
+        # Dictionary to store all isotopes
+        self.all_isotopes_names = []
 
-        # For each OMEGA timestep ..
-#        for i_O_temp in range(0,self.inner.nb_timesteps-1):
+        # This dictionary stores all stable isotopes that can
+        # be modified by the present yields
+        self.stable_decayed_isotopes = []
 
-            # Copy the timeframe (upper time boundary)
-#            t_O_up += self.inner.history.timesteps[i_O_temp]
+        # Dictionary from name to (z, n) and other direction
+        zn_to_name = {}
 
-            # Count the number of input entries incluced in the OMEGA timestep
-#            nb_counts = 0
-#            SF_temp = False
-#            if self.treat_sfe_t:
-#                SFE_list = []
-#            if self.treat_sfh_with_sfe:
-#                SFH_with_list = []
-#            while self.is_SF_t[0][i_in_temp] <= t_O_up:
-#                if self.is_SF_t[1][i_in_temp]:
-#                    SF_temp = True
-#                    if self.treat_sfe_t:
-#                        SFE_list.append(self.sfe_t[i_in_temp])
-#                    if self.treat_sfh_with_sfe:
-#                        SFH_with_list.append(self.sfh_with_sfe[i_in_temp])
-#                nb_counts += 1
-#                i_in_temp += 1
+        # Shorten the name for self.inner.history.isotopes
+        hist_isotopes = self.inner.history.isotopes
 
-            # Define whether or not there is SF in this OMEGA timestep
-            # No "i_in_temp+1" when nb_counts >=1 since the while loop already add a +1
-#            if nb_counts >= 1:
-#                self.SF_allowed_t[i_O_temp+1] = \
-#                    (SF_temp or self.is_SF_t[1][i_in_temp] or self.is_SF_t[1][i_in_temp-1])
-#                if self.treat_sfe_t:
-#                    SFE_list.append(self.sfe_t[i_in_temp])
-#                    SFE_list.append(self.sfe_t[i_in_temp-1])
-#                if self.treat_sfh_with_sfe:
-#                    SFH_with_list.append(self.sfh_with_sfe[i_in_temp])
-#                    SFH_with_list.append(self.sfh_with_sfe[i_in_temp-1])
-#            else:
-#                self.SF_allowed_t[i_O_temp+1] = \
-#                    (self.is_SF_t[1][i_in_temp-1] or self.is_SF_t[1][i_in_temp])
-#                if self.treat_sfe_t:
-#                    SFE_list.append(self.sfe_t[i_in_temp])
-#                    SFE_list.append(self.sfe_t[i_in_temp-1])
-#                if self.treat_sfh_with_sfe:
-#                    SFH_with_list.append(self.sfh_with_sfe[i_in_temp])
-#                    SFH_with_list.append(self.sfh_with_sfe[i_in_temp-1])
+        # Define secondary products depending on the reaction
+        self.decay_secondary = [
+                [], [], ["Nn-1"], ["H-1"], ["He-4"], ["Nn-1"], ["H-1"], ["He-4"],
+                ["He-4"], ["Nn-1", "Nn-1"], ["H-1", "H-1"], ["He-4", "He-4"],
+                ["He-4", "He-4"], ["Nn-1", "Nn-1"], ["Nn-1", "Nn-1", "Nn-1"],
+                ["Nn-1", "Nn-1", "Nn-1", "Nn-1"], ["H-1", "H-1"],
+                ["Nn-1", "He-4"], ["H-1", "He-4"], [], ["C-12"], []
+                ]
 
-            # Select the maximum SFE and SFR and overwrite the current SFE
-#            if self.treat_sfe_t:
-#                self.sfe[i_O_temp+1] = max(SFE_list)
-#            if self.treat_sfh_with_sfe:
-#                self.sfh_t[i_O_temp+1] = max(SFH_with_list)
+        # Seconds in a year
+        self.yr_to_sec = 31536000
 
-        # Treat the first OMEGA timestep
-#        if self.treat_sfe_t:
-#            self.sfe[0] = self.sfe[1]
-#        if self.treat_sfh_with_sfe:
-#            self.sfh_t[0] = self.sfh_t[1]
-#        self.SF_allowed_t[0] = self.SF_allowed_t[1]
+        # Copy of radio_iso, to resize it
+        cpy_radio_iso = list(self.inner.radio_iso)
 
+        # Load the multichannel or single channel network if needed
+        # This is done by creating a list of all the decay channels for each of
+        # the radioactive isotopes considered here
+        if self.inner.use_decay_module:
+
+            # Buld zn <-> name dictionaries
+            f_network = os.path.join("decay_data", self.inner.f_network)
+            with open(os.path.join(nupy_path, f_network), "r") as fread:
+                # Skip header line
+                fread.readline()
+
+                # Now store the data
+                for line in fread:
+                    lnlst = line.split()
+                    zz = int(lnlst[0]); aa = int(lnlst[1]); name = lnlst[2]
+
+                    # Create name
+                    name = name + "-" + lnlst[1]
+
+                    nn = aa - zz
+                    zn_to_name[(zz, nn)] = name
+
+            # Get the decay information from the decay module
+            # Store all the isotopic information
+            prevZZ, prevNN = None, None
+            for ii in range(len(decay_module.iso.reactions)):
+                # Z and n of every isotope in the module
+                zz = decay_module.iso.z[ii]; nn = decay_module.iso.n[ii]
+
+                # If not an element, break
+                if (zz + nn) == 0:
+                    break
+
+                # Store name for these zz, nn
+                name = zn_to_name[(zz, nn)]
+
+                # Check if isomer
+                if zz == prevZZ and nn == prevNN:
+                    name = "*" + name
+                    while name in self.all_isotopes_names:
+                        name = "*" + name
+
+                self.all_isotopes_names.append(name)
+                prevZZ, prevNN = zz, nn
+
+            # At this point we need to choose which isotopes to follow
+            # We also store the reactions
+            self.__choose_network(cpy_radio_iso, hist_isotopes)
+
+        elif self.inner.len_decay_file > 0:
+
+            # The information stored in decay_info is...
+            # decay_info[nb_radio_iso][0] --> Unstable isotope
+            # decay_info[nb_radio_iso][1] --> Stable isotope where it decays
+            # decay_info[nb_radio_iso][2] --> Mean-life (ln2*half-life)[yr]
+
+            # Build the network
+            for elem in self.inner.decay_info:
+
+                # Get names for reaction
+                targ = elem[0]; prod = elem[1]; rate = 1 / elem[2]
+
+                # Add reaction
+                reaction = self._Reaction(targ, prod, rate)
+
+                if targ in self.reac_dictionary:
+                    self.reac_dictionary[targ].append(reaction)
+                else:
+                    self.reac_dictionary[targ] = [reaction]
+
+                # Store stable product self.stable_decayed_isotopes
+                if prod in hist_isotopes:
+                    if prod not in self.stable_decayed_isotopes:
+                        self.stable_decayed_isotopes.append(prod)
+
+        # Restore the (maybe) modified arrays
+        self.inner.radio_iso = np.array(cpy_radio_iso)
+        self.inner.nb_radio_iso = len(self.inner.radio_iso)
+        self.inner.ymgal_radio = np.zeros((self.inner.nb_timesteps + 1, \
+                self.inner.nb_radio_iso))
+        self.ymgal_outer_radio = np.zeros((self.inner.nb_timesteps + 1, \
+                self.inner.nb_radio_iso))
+
+        # Initialize the decay arrays
+        nb_radio = self.inner.nb_radio_iso
+        nb_iso = len(self.stable_decayed_isotopes)
+        self.decay_from_radio = np.zeros(nb_radio)           # dd_radio
+        self.decay_to_radio = np.zeros((nb_radio, nb_radio)) # pp_radio
+        self.decay_to_stable = np.zeros((nb_iso, nb_radio))  # pp
+
+        # Now for each reaction, add to the decay arrays
+        for target in self.reac_dictionary:
+            # Get target index
+            targ_index = cpy_radio_iso.index(target)
+
+            # Get the inverse of the atomic mass of the target
+            targ_inv_AA = 1/float(target.split("-")[1])
+
+            for reac in self.reac_dictionary[target]:
+
+                # Add rate for dd_radio
+                self.decay_from_radio[targ_index] += reac.rate
+
+                # Modify rate by dividing for target mass fraction
+                rate_mod_1 = reac.rate*targ_inv_AA
+
+                # Select products list
+                prods = reac.products
+
+                # Rate for pp_radio or pp
+                for ii in range(len(prods)):
+                    prod = prods[ii]
+                    prodAA = float(prod.split("-")[1])
+
+                    # We have to divide the rate by the atomic mass of the
+                    # target and multiply by the atomic mass of the product
+                    # to conserve the total mass
+                    rate_mod_2 = rate_mod_1 * prodAA
+
+                    if prod in cpy_radio_iso:
+                        prod_index = cpy_radio_iso.index(prod)
+                    else:
+                        prod_index = self.stable_decayed_isotopes.index(prod)
+
+                    if prod in cpy_radio_iso:
+                        self.decay_to_radio[prod_index][targ_index] += rate_mod_2
+                    else:
+                        self.decay_to_stable[prod_index][targ_index] += rate_mod_2
+
+
+    ##############################################
+    #        Chose the unstable and stable       #
+    #       isotopes to follow based on the      #
+    #                 yield tables               #
+    ##############################################
+    def __choose_network(self, cpy_radio_iso, hist_isotopes, can_skip = True):
+
+        '''
+        This function populates the unstable and stable
+        isotopes based on the yield tables
+
+        '''
+
+        not_yet_followed = cpy_radio_iso[:]
+        skipped_elements = {}
+        while len(not_yet_followed) > 0:
+            # Get the target
+            targ = not_yet_followed.pop()
+
+            # Put the target in cpy_radio_iso
+            if targ in hist_isotopes:
+                if targ not in self.stable_decayed_isotopes:
+                    self.stable_decayed_isotopes.append(targ)
+                continue
+
+            elif targ not in cpy_radio_iso:
+                cpy_radio_iso.append(targ)
+
+            # Get its decay index
+            targ_index = self.all_isotopes_names.index(targ)
+
+            # Retrieve the number of reactions
+            n_reacts = decay_module.iso.reactions[targ_index][1]
+
+            # Decay rate in 1/year
+            rate = decay_module.iso.decay_constant[targ_index][0] * self.yr_to_sec
+            half_life = np.log(2) / rate
+
+            # Try to skip reaction if too short
+            skip_elem = False
+            if half_life < self.min_half_life and can_skip:
+                if targ not in self.inner.radio_iso:
+                    skip_elem = True
+
+            # For each reaction, store the products in not_yet_followed if they
+            # are not in cpy_radio_iso
+            for jj in range(n_reacts):
+                prod_list = []
+                react_indx = decay_module.iso.reactions[targ_index][jj + 2] - 1
+                react_type = str(decay_module.iso.reaction_types[react_indx])
+
+                # Apply the probability for this branch
+                rate_jj = rate * decay_module.iso.decay_constant[targ_index][jj + 1]
+                half_life_jj = np.log(2) / rate_jj
+
+                # Try to skip reaction if too long
+                if half_life_jj > self.max_half_life and n_reacts > 1:
+                    s = "Reaction of type {}".format(react_type)
+                    s += "for element {} too slow. Skipping.".format(targ)
+                    print(s)
+                    continue
+
+                # Get the product index and name
+                prod_index = decay_module.iso.product_isomer[targ_index][jj] - 1
+                if prod_index == targ_index and "SF" not in react_type:
+                    s = "Warning: {} decaying into itself! ".format(targ)
+                    s += "However, the module does not currently track "
+                    s += "an isomer of {}. Skipping decay.".format(targ)
+                    print(s)
+                    continue
+
+                prod_name = self.all_isotopes_names[prod_index]
+                prod_list.append(prod_name)
+
+                # Now get all side products
+                prod_list += self.decay_secondary[react_indx]
+
+                # Treat fissions
+                fiss_prods = []; fiss_rates = []
+                if "SF" in react_type:
+                    # Never skip a fission if we arrive here
+                    skip_elem = False
+
+                    fission_index = decay_module.iso.reactions[targ_index][0]
+                    fiss_vect = decay_module.iso.s_fission_vector[fission_index]
+                    for kk in range(len(self.all_isotopes_names)):
+                        if fiss_vect[kk] > 0:
+                            fiss_prods.append(self.all_isotopes_names[kk])
+                            fiss_rates.append(fiss_vect[kk])
+
+                # Store this reaction unless we are skipping it
+                if skip_elem:
+                    # Store the products and the probability of each channel
+                    if targ in skipped_elements:
+                        skipped_elements[targ].append([prod_list,\
+                                decay_module.iso.decay_constant[targ_index][jj + 1]])
+                    else:
+                        skipped_elements[targ] = [[prod_list,\
+                                decay_module.iso.decay_constant[targ_index][jj + 1]]]
+                else:
+                    # If the reaction is not skipped, just add it
+                    if len(fiss_prods) > 0:
+                        reac_list = []
+                        # If in a fission, just add every product as a new reaction
+                        for kk in range(len(fiss_prods)):
+                            reac_list.append(self._Reaction(targ,\
+                                    [fiss_prods[kk]], rate_jj*fiss_rates[kk]))
+                    else:
+                        reac_list = [self._Reaction(targ, prod_list, rate_jj)]
+
+                    if targ in self.reac_dictionary:
+                        self.reac_dictionary[targ] += reac_list
+                    else:
+                        self.reac_dictionary[targ] = reac_list
+
+                # Put products in the list!
+                for elem in prod_list + fiss_prods:
+                    if elem not in cpy_radio_iso and elem not in not_yet_followed:
+                        if elem not in self.stable_decayed_isotopes:
+                            not_yet_followed.append(elem)
+
+        # Deal with the skipped elements
+
+        # First, eliminate them from cpy_radio_iso
+        for elem in skipped_elements:
+            if elem in cpy_radio_iso:
+                cpy_radio_iso.remove(elem)
+
+        # Now substitute the skipped elements amongst themselves
+        for elem in skipped_elements:
+            for elem2 in skipped_elements:
+                if elem == elem2:
+                    continue
+
+                cpy_reacs = copy.deepcopy(skipped_elements[elem2])
+                for reac in cpy_reacs:
+                    if elem in reac[0]:
+
+                        # Store probability and other products
+                        prob = reac[1]
+                        other_prods = []
+                        for prod in reac[0]:
+                            if prod != elem:
+                                other_prods.append(prod)
+
+                        # Eliminate this reaction
+                        skipped_elements[elem2].remove(reac)
+
+                        # Now add all reactions for elem
+                        reacs = skipped_elements[elem]
+                        for reac2 in reacs:
+                            # Make a copy
+                            cpy = copy.deepcopy(reac2)
+
+                            # Modify this reaction
+                            cpy[0] += other_prods
+                            cpy[1] *= prob
+                            skipped_elements[elem2].append(cpy)
+
+        # Finally, remove the skipped elements from reactions
+        for elem in skipped_elements:
+            for targ in self.reac_dictionary:
+                cpy_reacs = copy.copy(self.reac_dictionary[targ])
+                for reac in cpy_reacs:
+                    if elem in reac.products:
+                        # Copy rate of reaction
+                        rate = reac.rate
+
+                        # Copy all other products
+                        keep_prods = []
+                        for prod in reac.products:
+                            if prod != elem:
+                                keep_prods.append(prod)
+
+                        # Eliminate reac
+                        self.reac_dictionary[targ].remove(reac)
+
+                        # Now add all the reactions of the skipped element
+                        for reac2 in skipped_elements[elem]:
+                            prod = reac2[0] + keep_prods
+                            this_rate = reac2[1] * rate
+                            reaction = self._Reaction(targ, prod, this_rate)
+                            self.reac_dictionary[targ].append(reaction)
 
     ##############################################
     #              Start Simulation              #
     ##############################################
     def __start_simulation(self):
 
+        # Load decay network if it exists
+        self.__create_reac_dictionary()
 
-        # Define the end of active period (depends on whether a galaxy merger occur)
+        # Define the end of active period (depends on whether a galaxy merger occurs)
         if self.t_merge > 0.0:
             i_up_temp = self.inner.i_t_merger+1
         else:
@@ -727,76 +1067,385 @@ class omega_plus():
         # For each timestep (defined by the OMEGA instance) ...
         for i_step_OMEGA in range(0,i_up_temp):
 
+            # Get convenient dt
+            totDt = self.inner.history.timesteps[i_step_OMEGA]
+
+            # Do a mock-up run in order to run self.inner.run_step and update mdot
+
+            # Mock up start ---------
+
             # Calculate the total current gas mass in the inner region
             self.sum_inner_ymgal_cur = np.sum(self.inner.ymgal[i_step_OMEGA])
 
             # Calculate the star formation rate [Msun/yr]
-            sfr_temp = self.__get_SFR(i_step_OMEGA)
+            sfr_temp = self.__get_SFR(i_step_OMEGA, self.sum_inner_ymgal_cur)
 
             # Calculate the galactic outflow rate [Msun/yr]
             or_temp = self.__get_outflow_rate(i_step_OMEGA, sfr_temp)
 
             # Calculate the galactic inflow rate [Msun/yr] for all isotopes
-            ir_iso_temp = self.__get_inflow_rate(i_step_OMEGA)
-            #ir_iso_temp[-1] = 2.0e-3 * np.sum(ir_iso_temp)
+            ir_iso_temp = self.__get_inflow_rate(i_step_OMEGA, \
+                self.ymgal_outer[i_step_OMEGA])
 
             # Convert rates into total masses (except for SFR)
-            m_lost = or_temp * self.inner.history.timesteps[i_step_OMEGA]
-            m_added = ir_iso_temp *  self.inner.history.timesteps[i_step_OMEGA]
+            m_lost = or_temp * totDt
+            m_added = ir_iso_temp * totDt
             sum_m_added = np.sum(m_added)
             if self.f_halo_to_gal_out >= 0.0:
-                self.m_lost_for_halo = copy.deepcopy(m_lost)
-
-            # Keep the values in memory
-            self.inner.m_outflow_t[i_step_OMEGA] = m_lost
-            self.inner.m_inflow_t[i_step_OMEGA] = sum_m_added
+                self.m_lost_for_halo = m_lost
 
             # Limit the inflow rate if needed (the outflow rate is considered in OMEGA)
             if sum_m_added > np.sum(self.ymgal_outer[i_step_OMEGA]):
-                m_added = copy.deepcopy(self.ymgal_outer[i_step_OMEGA])
+                m_added = copy.copy(self.ymgal_outer[i_step_OMEGA])
+
+            # Recalculate ir_iso_temp
+            ir_iso_temp = m_added / totDt
+            sum_ir_iso_temp = np.sum(ir_iso_temp)
 
             # If the IMF must be sampled ...
-            m_stel_temp = sfr_temp * self.inner.history.timesteps[i_step_OMEGA]
+            m_stel_temp = sfr_temp * totDt
             if self.inner.imf_rnd_sampling and self.inner.m_pop_max >= m_stel_temp:
-                
+
                 # Get the sampled masses
-                mass_sampled = self.inner._get_mass_sampled(\
-                    sfr_temp * self.inner.history.timesteps[i_step_OMEGA])
+                mass_sampled = self.inner._get_mass_sampled(sfr_temp * totDt)
 
             # No mass sampled if using the full IMF ...
             else:
                 mass_sampled = np.array([])
-            if m_stel_temp < 1.0:
-                sfr_temp = 0.0
-
 
             # Evolve the inner region for one step.  The 'i_step_OMEGA + 1'
-            # is because OMEGA update the quantities in the next upcoming timestep
-            self.inner.run_step(i_step_OMEGA+1, sfr_temp, mass_sampled=mass_sampled, \
-                m_added=m_added, m_lost=m_lost, no_in_out=True)
+            # is because OMEGA updates the quantities in the next
+            # upcoming timestep
+            self.inner.run_step(i_step_OMEGA+1, sfr_temp, \
+                mass_sampled=mass_sampled, m_added=m_added, m_lost=m_lost, \
+                no_in_out=True)
 
-            # Evolve the outer region for one step
-            self.__evolve_outer(m_lost, m_added, i_step_OMEGA)
+            # Mock up end ---------
 
-            # If the inner gas reservoir needs to be modified to recover
-            # a pre-defined SFR for the next timestep ..
-            if self.treat_sfh_with_sfe:
-                if i_step_OMEGA < (self.inner.nb_timesteps-1) and \
-                   self.sfh_t[i_step_OMEGA+1] > 0.0:
+            # Copy initial values for safekeeping
+            mgal_init = np.array(self.inner.ymgal[i_step_OMEGA])
+            mcgm_init = np.array(self.ymgal_outer[i_step_OMEGA])
 
-                    # Correct the mass of the inner region
-                    self.__correct_inner_for_sfh(i_step_OMEGA)
+            if self.inner.len_decay_file > 0:
+                mgal_radio_init = np.array(self.inner.ymgal_radio[i_step_OMEGA])
+                mcgm_radio_init = np.array(self.ymgal_outer_radio[i_step_OMEGA])
+            else:
+                mgal_radio_init = np.array([0])
+                mcgm_radio_init = np.array([0])
+
+            # Initialize to zero the analysis quantities
+            final_sfr = 0
+            total_m_added = np.array(mgal_init)*0
+            total_m_lost = 0
+
+            HH = totDt; newHH = HH
+
+            while totDt > 0:
+                converged = True
+
+                # Run the patankar algorithm for the substeps
+                err = []
+                t_m_gal = []; t_m_gal_radio = []
+                t_m_cgm = []; t_m_cgm_radio = []
+                t_total_sfr = []; t_m_added = []; t_m_lost = []
+
+                for ii in range(len(self.substeps)):
+                    nn = self.substeps[ii]
+                    fnn = float(nn)
+                    htm = HH/fnn
+
+                    # Integrate
+                    values = self.__run_substeps(i_step_OMEGA, mgal_init,\
+                        mgal_radio_init, mcgm_init, mcgm_radio_init, htm, nn)
+                    m_gal, m_gal_radio, m_cmg, m_cgm_radio, total_sfr,\
+                        m_added, m_lost = values
+
+                    # Extrapolate according to Deuflhard 1983 but with some
+                    # modifications to account for different convergence speed
+                    t_m_gal.append([m_gal])
+                    t_m_gal_radio.append([m_gal_radio])
+                    t_m_cgm.append([m_cmg])
+                    t_m_cgm_radio.append([m_cgm_radio])
+                    t_total_sfr.append([total_sfr])
+                    t_m_added.append([m_added])
+                    t_m_lost.append([m_lost])
+
+                    # Generic extrapolation array:
+                    t_extrap = [t_m_gal, t_m_gal_radio, t_m_cgm, t_m_cgm_radio,\
+                            t_total_sfr, t_m_added, t_m_lost]
+
+                    if ii > 0:
+                        for kk in range(len(t_m_gal) - 1):
+                            for tt in t_extrap:
+                                tt[-1].append(tt[-1][kk] + (tt[-1][kk] - tt[-2][kk])\
+                                    / ((fnn/self.substeps[ii - kk - 1]) - 1))
+
+                    # Calculate mean relative error
+                    if ii > 0:
+                        err.append(0)
+                        for tt in t_extrap:
+                            err[-1] += np.mean(np.abs(tt[-1][-2] - tt[-1][-1])\
+                                    / np.abs(tt[-1][-2] + self.min_val))
+
+                        if err[-1] < self.tolerance:
+                            break
+                #print('For Loop - going OUT')
+
+                # Take solution
+                if len(err) > 0:
+                    if err[-1] < self.tolerance:
+                        mgal_init = np.abs(t_m_gal[-1][-2])
+                        mgal_radio_init = np.abs(t_m_gal_radio[-1][-2])
+                        mcgm_init = np.abs(t_m_cgm[-1][-2])
+                        mcgm_radio_init = np.abs(t_m_cgm_radio[-1][-2])
+                        final_sfr += np.abs(t_total_sfr[-1][-2])
+                        total_m_added += np.abs(t_m_added[-1][-2])
+                        total_m_lost += np.abs(t_m_lost[-1][-2])
+                        converged = True
+                    else:
+                        converged = False
+
+                    # Get the root error
+                    for ii in range(len(err)):
+                        err[ii] = (err[ii]/self.tolerance)**(1./(ii + 2))
+
+                    hhcoef = min(err)
+
+                    # Calculate newHH
+                    if hhcoef <= 0:
+                        newHH = totDt
+                    elif not converged:
+                        newHH = HH*0.1
+                    else:
+                        newHH = HH/hhcoef
+
+                # Update totDt and HH
+                if converged:
+                    totDt -= HH
+
+                HH = 2*newHH
+
+                # Check that HH remains below totDt
+                if totDt < HH*1.1:
+                    HH = totDt
+
+            # Keep the lost and added values in memory
+            self.inner.m_outflow_t[i_step_OMEGA] = total_m_lost
+            self.inner.m_inflow_t[i_step_OMEGA] = np.sum(total_m_added)
+
+            # Now that we are out of it, update final values
+            self.inner.ymgal[i_step_OMEGA + 1] += mgal_init
+            self.ymgal_outer[i_step_OMEGA + 1] += mcgm_init
+            if self.inner.len_decay_file > 0:
+                self.inner.ymgal_radio[i_step_OMEGA + 1] += mgal_radio_init
+                self.ymgal_outer_radio[i_step_OMEGA + 1] += mcgm_radio_init
+
+                # TODO
+                # Perhaps we want to keep track of the individual contributions?
+                #if not self.inner.pre_calculate_SSPs and sum_ymgal_radio > 1e-5:
+                    #pass
+
+            # Update original arrays
+            self.inner.history.sfr_abs[i_step_OMEGA] = final_sfr / self.inner.history.timesteps[i_step_OMEGA]
+            self.inner.m_outflow_t[i_step_OMEGA] = total_m_lost
+            self.inner.m_locked = final_sfr
+
+            # Get the new metallicity of the gas and update history class
+            self.inner.zmetal = self.inner._getmetallicity(i_step_OMEGA)
+            self.inner._update_history(i_step_OMEGA)
 
         # Evolve the stellar population only .. if a galaxy merger occured
         if self.t_merge > 0.0:
-            for i_step_last in range(i_step_OMEGA+1,self.inner.nb_timesteps):
-                self.inner.run_step(i_step_last+1, 0.0, no_in_out=True)
+
+            for i_step_last in range(i_step_OMEGA + 1, self.inner.nb_timesteps):
+                self.inner.run_step(i_step_last + 1, 0.0, no_in_out=True)
+
+                # Update original arrays
+                self.inner.history.sfr_abs[i_step_OMEGA] = 0.0
+                self.inner.m_outflow_t[i_step_OMEGA] = 0.0
+                self.inner.m_locked = 0.0
+
+                # Get the new metallicity of the gas and update history class
+                self.inner.zmetal = self.inner._getmetallicity(i_step_OMEGA)
+                self.inner._update_history(i_step_OMEGA)
+
+        # FINAL TIMESTEP  .. PUT THIS IN A FUNCTION
+
+        # Do the final update of the history class
+        self.inner._update_history_final()
+
+        # Add the evolution arrays to the history class
+        self.inner.history.m_tot_ISM_t = self.inner.m_tot_ISM_t
+        self.inner.history.eta_outflow_t = self.inner.eta_outflow_t
+
+        # If external control ...
+        if self.inner.external_control:
+            self.inner.history.sfr_abs[i_step_OMEGA] = self.inner.history.sfr_abs[i_step_OMEGA-1]
+
+        # Calculate the total mass of gas
+        self.inner.m_stel_tot = 0.0
+        for i_tot in range(0,len(self.inner.history.timesteps)):
+            self.inner.m_stel_tot += self.inner.history.sfr_abs[i_tot] * \
+                self.inner.history.timesteps[i_tot]
+        if self.inner.m_stel_tot > 0.0:
+            self.inner.m_stel_tot = 1.0 / self.inner.m_stel_tot
+        self.inner.f_m_stel_tot = []
+        m_temp = 0.0
+        for i_tot in range(0,len(self.inner.history.timesteps)):
+            m_temp += self.inner.history.sfr_abs[i_tot] * \
+                self.inner.history.timesteps[i_tot]
+            self.inner.f_m_stel_tot.append(m_temp*self.inner.m_stel_tot)
+        self.inner.f_m_stel_tot.append(self.inner.f_m_stel_tot[-1])
+
+        # Announce the end of the simulation
+        print ('   OMEGA run completed -',self.inner._gettime())
+
+    ##############################################
+    #        Run substeps for patankar           #
+    ##############################################
+    def __run_substeps(self, i_step_OMEGA, mgal_init, mgal_radio_init,\
+            mcgm_init, mcgm_radio_init, htm, nn):
+
+        '''
+        This function runs the patankar algorithm for nn substeps.
+
+        '''
+
+        # Store initial values
+        isot_mgal = mgal_init
+        isot_mgal_radio = mgal_radio_init
+        isot_mcgm = mcgm_init
+        isot_mcgm_radio = mcgm_radio_init
+
+        # Initialize to zero
+        m_lost = 0; m_added = 0; total_sfr = 0
+
+        # Introduce the yields for all isotopes
+        yield_rate = self.inner.mdot[i_step_OMEGA] / (htm * nn)
+        if self.inner.len_decay_file > 0:
+            yield_rate_radio = self.inner.mdot_radio[i_step_OMEGA] / (htm * nn)
+
+            # Increase the size of the array if needed
+            diff = self.inner.nb_radio_iso - len(yield_rate_radio)
+            yield_rate_radio = np.array(list(yield_rate_radio) + [0]*diff)
+        else:
+            yield_rate_radio = 0.
+
+        for ii in range(nn):
+            # Calculate dtt
+            dtt = ii*htm
+
+            # Calculate the total current gas mass in the inner region
+            current_mgal = np.sum(isot_mgal)
+            inv_mass = 1 / (current_mgal + self.min_val)
+
+            # Calculate the total current gas mass in the outer region
+            current_mcgm = np.sum(isot_mcgm)
+            inv_mass_cgm = 1 / (current_mcgm + self.min_val)
+
+            # Calculate the star formation rate [Msun/yr]
+            sfr_temp = self.__get_SFR(i_step_OMEGA, current_mgal, dtt)
+            isot_sfr_temp = sfr_temp * isot_mgal * inv_mass
+            isot_sfr_temp_radio = sfr_temp * isot_mgal_radio * inv_mass
+            total_sfr += sfr_temp * htm
+
+            # Calculate the galactic outflow rate [Msun/yr]
+            or_temp = self.__get_outflow_rate(i_step_OMEGA, sfr_temp, dtt)
+            isot_or_temp = or_temp * isot_mgal * inv_mass
+            isot_or_temp_radio = or_temp * isot_mgal_radio * inv_mass
+            m_lost += or_temp * htm
+
+            # Calculate the galactic inflow rate [Msun/yr] for all isotopes
+            ir_iso_temp = self.__get_inflow_rate(i_step_OMEGA, isot_mcgm, dtt)
+            ir_iso_temp_radio = sum(ir_iso_temp) * isot_mcgm_radio * inv_mass_cgm
+            m_added += ir_iso_temp * htm
+
+            # Get production factors for ymgal and ymgal_radio
+            pp = ir_iso_temp + yield_rate
+            pp_radio = ir_iso_temp_radio + yield_rate_radio
+
+            # Get destruction factors for ymgal and ymgal_radio
+            dd = (isot_or_temp + isot_sfr_temp) / (isot_mgal + self.min_val)
+            dd_radio = (isot_or_temp_radio + isot_sfr_temp_radio)\
+                    / (isot_mgal_radio + self.min_val)
+
+            # Modify pp, pp_radio, and dd_radio due to decays
+            if self.inner.len_decay_file > 0:
+                pp, pp_radio, dd_radio = self.__get_radio_pp_dd(pp, pp_radio,\
+                    dd_radio, isot_mgal_radio)
+
+            # Get new ymgal and ymgal_radio
+            isot_mgal = (isot_mgal + pp * htm) / (1 + dd * htm)
+            isot_mgal_radio = (isot_mgal_radio + pp_radio * htm)\
+                    / (1 + dd_radio * htm)
+
+            # Get rates for intergalactic to circumgalactic flows
+            added_cgm, removed_cgm = self.__get_rates_for_DM_variation(i_step_OMEGA,\
+                    current_mcgm, dtt)
+            m_out_cgm = self.__get_halo_outflow_rate(i_step_OMEGA, dtt)
+            isot_added_cgm = added_cgm * self.prim_x_frac
+            isot_removed_cgm = removed_cgm * isot_mcgm * inv_mass_cgm
+            isot_removed_cgm_radio = removed_cgm * isot_mcgm_radio * inv_mass_cgm
+            isot_m_out_cgm = m_out_cgm * isot_mcgm * inv_mass_cgm
+            isot_m_out_cgm_radio = m_out_cgm * isot_mcgm_radio * inv_mass_cgm
+
+            # Get production factors for ymgal_outer and ymgal_outer_radio
+            pp = isot_or_temp + isot_added_cgm
+            pp_radio = isot_or_temp_radio
+
+            # Get destruction factors for ymgal_outer and ymgal_outer_radio
+            dd = (ir_iso_temp + isot_removed_cgm + isot_m_out_cgm) /\
+                    (isot_mcgm + self.min_val)
+            dd_radio = (ir_iso_temp_radio + isot_removed_cgm_radio\
+                    + isot_m_out_cgm_radio) / (isot_mcgm_radio + self.min_val)
+
+            # Modify pp, pp_radio, and dd_radio due to decays
+            if self.inner.len_decay_file > 0:
+                pp, pp_radio, dd_radio = self.__get_radio_pp_dd(pp, pp_radio,\
+                    dd_radio, isot_mcgm_radio)
+
+            # Get new ymgal_outer and ymgal_outer_radio
+            isot_mcgm = (isot_mcgm + pp * htm) / (1 + dd * htm)
+            isot_mcgm_radio = (isot_mcgm_radio + pp_radio * htm)\
+                    / (1 + dd_radio * htm)
+
+        # Return the values
+        return isot_mgal, isot_mgal_radio, isot_mcgm, isot_mcgm_radio, \
+                total_sfr, m_added, m_lost
+
+
+    ##############################################
+    #           Get pp, dd from reactions        #
+    ##############################################
+    def __get_radio_pp_dd(self, pp, pp_radio, dd_radio, isot_mass_radio):
+
+        '''
+        This function updates pp, pp_radio and dd_radio due
+        to radioactive decays and other reactions from the reactions
+        dictionary.
+
+        '''
+
+        # Simply add the values
+        dd_radio += self.decay_from_radio
+
+        # For radioactive isotopes
+        for ii in range(self.inner.nb_radio_iso):
+            pp_radio[ii] += sum(self.decay_to_radio[ii] * isot_mass_radio)
+
+        # For stable isotopes
+        for ii in range(len(self.stable_decayed_isotopes)):
+            isot = self.stable_decayed_isotopes[ii]
+            indx = self.inner.history.isotopes.index(isot)
+            pp[indx] += sum(self.decay_to_stable[ii] * isot_mass_radio)
+
+        return pp, pp_radio, dd_radio
 
 
     ##############################################
     #                  Get SFR                   #
     ##############################################
-    def __get_SFR(self, i_step_OMEGA):
+    def __get_SFR(self, i_step_OMEGA, m_gas_SFR, dtt=0):
 
         '''
         Calculate and return the star formation rate of the inner region
@@ -805,6 +1454,9 @@ class omega_plus():
         =========
 
           i_step_OMEGA : Current timestep index of the OMEGA instance
+          m_gas_SFR: Current mass of gas
+          dtt: Time delay off the current time of timestep i_step_OMEGA
+               This is used in case of refinement timesteps during system integration
 
         '''
 
@@ -812,18 +1464,41 @@ class omega_plus():
         if self.is_SF:
             if self.SF_allowed_t[i_step_OMEGA]:
                 if self.inner.m_crit_on:
-                    if self.sum_inner_ymgal_cur <= self.inner.m_crit_t[i_step_OMEGA]:
+                    if dtt > 0:
+                        m_crit_t_temp = self.inner.m_crit_t_coef[i_step_OMEGA][0] * \
+                            (self.inner.history.age[i_step_OMEGA]+dtt) + \
+                                self.inner.m_crit_t_coef[i_step_OMEGA][1]
+                    else:
+                        m_crit_t_temp = self.inner.m_crit_t[i_step_OMEGA]
+
+                    if m_gas_SFR <= m_crit_t_temp:
                         m_gas_temp = 0.0
                     else:
-                        #m_gas_temp = self.sum_inner_ymgal_cur - self.inner.m_crit_t[i_step_OMEGA]
-                        m_gas_temp = self.sum_inner_ymgal_cur
+                        m_gas_temp = m_gas_SFR - m_crit_t_temp
+                        #m_gas_temp = m_gas_SFR
+
                 else:
-                    m_gas_temp = copy.deepcopy(self.sum_inner_ymgal_cur)
+                    m_gas_temp = m_gas_SFR
+
+                # Interpolate SFE
+                if dtt > 0:
+                    sfe_temp = self.sfe_coef[i_step_OMEGA][0] * \
+                        (self.inner.history.age[i_step_OMEGA]+dtt) + \
+                            self.sfe_coef[i_step_OMEGA][1]
+                else:
+                    sfe_temp = self.sfe[i_step_OMEGA]
+
+                # Return star formation rate
                 if self.treat_sfe_t:
-                    return self.sfe[i_step_OMEGA] * m_gas_temp  
+                    return sfe_temp * m_gas_temp
                 else:
-                    return self.sfe[i_step_OMEGA] * m_gas_temp / \
-                           self.inner.t_SF_t[i_step_OMEGA]
+                    if dtt > 0:
+                        t_SF_t_temp = self.inner.t_SF_t_coef[i_step_OMEGA][0] * \
+                            (self.inner.history.age[i_step_OMEGA]+dtt) + \
+                                self.inner.t_SF_t_coef[i_step_OMEGA][1]
+                    else:
+                        t_SF_t_temp = self.inner.t_SF_t[i_step_OMEGA]
+                    return sfe_temp * m_gas_temp / t_SF_t_temp
             else:
                 return 0.0
         else:
@@ -833,7 +1508,7 @@ class omega_plus():
     ##############################################
     #              Get Outflow Rate              #
     ##############################################
-    def __get_outflow_rate(self, i_step_OMEGA, sfr_temp):
+    def __get_outflow_rate(self, i_step_OMEGA, sfr_temp, dtt=0):
 
         '''
         Calculate and return the galactic outflow rate of the inner region
@@ -843,28 +1518,59 @@ class omega_plus():
 
           i_step_OMEGA : Current timestep index of the OMEGA instance
           sfr_temp : Star formation rate of the current timestep [Msun/yr]
+          dtt: Time delay off the current time of timestep i_step_OMEGA
+               This is used in case of refinement timesteps during system integration
+
 
         '''
 
         # If we use the DM_evolution option from Cote et al. (2017) ..
         if self.DM_outflow_C17:
- 
+
+            # Interpolate
+            if dtt > 0:
+                m_DM_t_temp = self.inner.m_DM_t_coef[i_step_OMEGA][0] * \
+                    (self.inner.history.age[i_step_OMEGA]+dtt) + \
+                        self.inner.m_DM_t_coef[i_step_OMEGA][1]
+            else:
+                m_DM_t_temp = self.inner.m_DM_t[i_step_OMEGA]
+
             # Calculate the mass-loading factor
             if self.C17_eta_z_dep:
+
+                # Interpolate
+                if dtt > 0:
+                    redshift_t_temp = self.inner.redshift_t_coef[i_step_OMEGA][0] * \
+                        (self.inner.history.age[i_step_OMEGA]+dtt) + \
+                            self.inner.redshift_t_coef[i_step_OMEGA][1]
+                else:
+                    redshift_t_temp = self.inner.m_DM_t[i_step_OMEGA]
+
                 mass_loading_gor = self.eta_norm * \
-                    self.inner.m_DM_t[i_step_OMEGA]**((-0.3333)*self.inner.exp_ml) * \
-                        (1+self.inner.redshift_t[i_step_OMEGA])**(-(0.5)*self.inner.exp_ml)
+                    m_DM_t_temp**((-0.3333)*self.inner.exp_ml) * \
+                        (1+redshift_t_temp)**(-(0.5)*self.inner.exp_ml)
             else:
-                mass_loading_gor = self.eta_norm * \
-                    self.inner.m_DM_t[i_step_OMEGA]**((-0.3333)*self.inner.exp_ml)
+                mass_loading_gor = self.eta_norm * m_DM_t_temp**((-0.3333)*self.inner.exp_ml)
 
         # If the mass-loading follows Crosby et al. (2015) ..
         elif self.epsilon_sne_gal >= 0.0:
 
+            # Interpolate
+            if dtt > 0:
+                m_DM_t_temp = self.inner.m_DM_t_coef[i_step_OMEGA][0] * \
+                    (self.inner.history.age[i_step_OMEGA]+dtt) + \
+                        self.inner.m_DM_t_coef[i_step_OMEGA][1]
+                r_vir_DM_t_temp = self.inner.r_vir_DM_t_coef[i_step_OMEGA][0] * \
+                    (self.inner.history.age[i_step_OMEGA]+dtt) + \
+                        self.inner.r_vir_DM_t_coef[i_step_OMEGA][1]
+            else:
+                m_DM_t_temp = self.inner.m_DM_t[i_step_OMEGA]
+                r_vir_DM_t_temp = self.inner.r_vir_DM_t[i_step_OMEGA]
+
+
             # Calculate the mass-loading factor
             mass_loading_gor = self.gamma_cte * self.nb_ccsne_per_m * self.epsilon_sne_gal * \
-                (self.inner.r_vir_DM_t[i_step_OMEGA]*0.001 / \
-                    self.inner.m_DM_t[i_step_OMEGA])**self.gal_out_index
+                (r_vir_DM_t_temp*0.001 / m_DM_t_temp)**self.gal_out_index
 
         # If the mass-loading is constant ..
         else:
@@ -887,6 +1593,9 @@ class omega_plus():
 
         # If the outflow follows the SNe energy (delayed outflows) ..
         else:
+
+            print('NOT READY YET!!!!')
+            return -1
 
             # Calculate the SSP mass
             SSP_mass_temp = sfr_temp * self.inner.history.timesteps[i_step_OMEGA]
@@ -937,7 +1646,7 @@ class omega_plus():
     ##############################################
     #              Get Inflow Rate               #
     ##############################################
-    def __get_inflow_rate(self, i_step_OMEGA):
+    def __get_inflow_rate(self, i_step_OMEGA, ymgal_outer, dtt=0):
 
         '''
         Calculate and return the galactic inflow rate of the inner region
@@ -947,11 +1656,15 @@ class omega_plus():
         =========
 
           i_step_OMEGA : Current timestep index of the OMEGA instance
+          ymgal_outer: Current isotopic composition of the CGM
 
         '''
 
+        # Total mass of the CGM
+        sum_ymgal_outer = np.sum(ymgal_outer)
+
         # If this is a star forming galaxy ..
-        if self.is_SF and np.sum(self.ymgal_outer[i_step_OMEGA]) > 0.0:
+        if self.is_SF and sum_ymgal_outer > 0.0:
 
           # If input exponential infall laws ..
           # For each infall episode, exp_infall --> [Norm, t_max, timescale]
@@ -959,133 +1672,85 @@ class omega_plus():
             cooling_rate = 0.0
             for i_in in range(self.nb_exp_infall):
                 cooling_rate += self.exp_infall[i_in][0] * \
-                    np.exp(-(self.inner.t - self.exp_infall[i_in][1]) / \
-                        self.exp_infall[i_in][2])
+                    np.exp(-((self.inner.history.age[i_step_OMEGA] + dtt) - \
+                    self.exp_infall[i_in][1]) / self.exp_infall[i_in][2])
+
             # Calculate the isotope cooling rates
             iso_rate_temp = np.zeros(self.inner.nb_isotopes)
-            sum_ymgal_outer_temp = np.sum(self.ymgal_outer[i_step_OMEGA])
-            if sum_ymgal_outer_temp > 0.0:
-                m_tot_inv = 1.0 / sum_ymgal_outer_temp
+            if sum_ymgal_outer > 0.0:
+                m_tot_inv = 1.0 / sum_ymgal_outer
                 for j_gir in range(0,self.inner.nb_isotopes):
-                    iso_rate_temp[j_gir] = cooling_rate * m_tot_inv * \
-                       self.ymgal_outer[i_step_OMEGA][j_gir]
+                    iso_rate_temp[j_gir] = cooling_rate * m_tot_inv * ymgal_outer[j_gir]
 
-            # Return the inflow rate of all isotopes
-            return np.array(iso_rate_temp)
+            # If the rate is too big, return a constant rate
+            dtBig = self.inner.history.timesteps[i_step_OMEGA]
+            if np.sum(iso_rate_temp) * dtBig > np.sum(ymgal_outer):
+                iso_rate_temp = ymgal_outer / dtBig
 
-          # If an input inflow mass is provided ..
+          # If an input inflow rate is provided ..
           elif self.len_m_inflow_in > 0:
-            cooling_rate = self.m_inflow_in[i_step_OMEGA]/\
-                           self.inner.history.timesteps[i_step_OMEGA]
+
+            # Interpolate
+            if dtt > 0:
+                cooling_rate = self.m_inflow_in_rate_coef[i_step_OMEGA][0] * \
+                    (self.inner.history.age[i_step_OMEGA] + dtt) + \
+                        self.m_inflow_in_rate_coef[i_step_OMEGA][1]
+            else:
+                cooling_rate = self.m_inflow_in_rate[i_step_OMEGA]
+
             # Calculate the isotope cooling rates
-            iso_rate_temp = np.zeros(self.inner.nb_isotopes)
-            sum_ymgal_outer_temp = np.sum(self.ymgal_outer[i_step_OMEGA])
-            if sum_ymgal_outer_temp > 0.0:
-                m_tot_inv = 1.0 / sum_ymgal_outer_temp
-                for j_gir in range(0,self.inner.nb_isotopes):
-                    iso_rate_temp[j_gir] = cooling_rate * m_tot_inv * \
-                       self.ymgal_outer[i_step_OMEGA][j_gir]
+            if sum_ymgal_outer > 0.0:
+                iso_rate_temp = cooling_rate * ymgal_outer / sum_ymgal_outer
+            else:
+                iso_rate_temp = np.zeros(self.inner.nb_isotopes)
 
-            # Return the inflow rate of all isotopes
-            return np.array(iso_rate_temp)
+            # If the rate is too big, return a constant rate
+            dtBig = self.inner.history.timesteps[i_step_OMEGA]
+            if np.sum(iso_rate_temp) * dtBig > np.sum(ymgal_outer):
+                iso_rate_temp = ymgal_outer / dtBig
 
+          # If the inflow rate needs to be calculated ..
           else:
 
-            # Calculate the free-fall timescale [yr]
+            # Assign an input inflow timescale for the free-fall timescale [yr]
             if self.t_inflow > 0.0:
                 t_ff_temp = self.t_inflow
+
+            # Calculate the free-fall timescale [yr]
             else:
+
+                # Interpolate
+                if dtt > 0:
+                    redshift_temp = self.inner.redshift_t_coef[i_step_OMEGA][0] * \
+                        (self.inner.history.age[i_step_OMEGA] + dtt) + \
+                            self.inner.redshift_t_coef[i_step_OMEGA][1]
+                else:
+                    redshift_temp = self.inner.redshift_t[i_step_OMEGA]
+
+                # Calculate interpolated free-fall
                 t_ff_temp = self.t_ff_cte * self.f_t_ff * 0.1 * (1.0 + \
-                    self.inner.redshift_t[i_step_OMEGA])**((-1.5)*self.t_ff_index) / \
+                    redshift_temp)**((-1.5)*self.t_ff_index) / \
                         self.inner.H_0 * 9.7759839e11
                 # Constant is 1.1107 * 3.086e16 / 3.154e7
 
-            # If Grackle is used to calculate the cooling timescale ..
-            if False:
-                dummy = 1.0
-#            if self.Grackle_on:
+            # Use free-fall time
+            cooling_time = t_ff_temp
 
-#                # Choose Cloudy data
-#                # Somehow, this line needs to be at the same place than the fc
-#                # declaration.. otherwise the chemistry cannot be initialized .. weird
-#                self.my_chemistry.grackle_data_file = os.sep.join(
-#                    [self.grackle_dir, 'input', 'CloudyData_noUVB.h5'])
-
-#                # Set the scale factor
-#                self.my_chemistry.a_value = 1.0 / \
-#                    (1.0 + self.inner.redshift_t[i_step_OMEGA]) / \
-#                        self.my_chemistry.a_units
-#                self.my_chemistry.velocity_units = \
-#                    (self.my_chemistry.length_units / self.my_chemistry.time_units)
-
-#                # Set the fluid container
-# !! IF I use rho_500
-#                fc = setup_fluid_container(self.my_chemistry, \
-#                    temperature=self.T_vir_t[i_step_OMEGA], \
-#                        density=self.rho_500_t[i_step_OMEGA], \
-#                            metal_mass_fraction=self.outer_Z[i_step_OMEGA], converge=True)
-# !! IF I use average halo gas density [g cm-3]
-#                av_density = np.sum(self.ymgal_outer[i_step_OMEGA]) * 2.83489281e-31 / \
-#                              self.inner.r_vir_DM_t[i_step_OMEGA]**3
-#                fc = setup_fluid_container(self.my_chemistry, \
-#                    temperature=self.T_vir_t[i_step_OMEGA], \
-#                        density=av_density, \
-#                            metal_mass_fraction=self.outer_Z[i_step_OMEGA], converge=True)
-
-#                # Calculate the cooling time [yr]
-#                fc.calculate_temperature()
-#                fc.calculate_cooling_time()
-#                cooling_time = fc["cooling_time"] * \
-#                    self.my_chemistry.time_units / self.yr_in_s * -1.0
-
-#                # Calculate the cooling rate
-#                mu = fc.calculate_mean_molecular_weight()
-#                density_proper = fc["density"] / \
-#                    (self.my_chemistry.a_units * self.my_chemistry.a_value)**(3*\
-#                        self.my_chemistry.comoving_coordinates)
-#                e_CGS = fc["energy"] * self.my_chemistry.velocity_units**2
-#                rho_CGS = density_proper * self.my_chemistry.density_units
-#                n_CGS = rho_CGS / (mu * mass_hydrogen_cgs)
-#                t_cool_CGS = np.abs(fc["cooling_time"] * self.my_chemistry.time_units)
-#                self.cooling_rate[i_step_OMEGA] = e_CGS * rho_CGS / (t_cool_CGS * n_CGS**2)
-#                del fc
-
-#                # If the cooling time is negative (heating) ..
-#                if cooling_time <= 0.0:                
-#                    return np.zeros(self.inner.nb_isotopes)
-
-#                # Choose free-fall time if the cooling time is shorter 
-#                if cooling_time < t_ff_temp:
-#                    cooling_time = t_ff_temp
-#                self.t_cool[i_step_OMEGA] = copy.deepcopy(cooling_time)
-
-            # If Grackle is not used ..
-            else:
-
-                # Use free-fall time
-                cooling_time = t_ff_temp
-                #cooling_time = t_ff_temp * (544507042.254/self.inner.m_DM_t[i_step_OMEGA])**0.5
-                self.t_cool[i_step_OMEGA] = copy.deepcopy(cooling_time)
-
-            # Get the total mass of the halo gas
-            sum_ymgal_outer_temp = np.sum(self.ymgal_outer[i_step_OMEGA])
+            #cooling_time = t_ff_temp * (544507042.254/self.inner.m_DM_t[i_step_OMEGA])**0.5
+            self.t_cool[i_step_OMEGA] = cooling_time
 
             # Calculate the total cooling rate [Msun/yr]
-            cooling_rate = sum_ymgal_outer_temp / cooling_time
+            cooling_rate = sum_ymgal_outer / cooling_time
 
             # Calculate the isotope cooling rates
-            iso_rate_temp = np.zeros(self.inner.nb_isotopes)
-            if sum_ymgal_outer_temp > 0.0:
-                m_tot_inv = 1.0 / sum_ymgal_outer_temp
-                for j_gir in range(0,self.inner.nb_isotopes):
-                    iso_rate_temp[j_gir] = cooling_rate * m_tot_inv * \
-                       self.ymgal_outer[i_step_OMEGA][j_gir]
-
-            # Return the inflow rate of all isotopes
-            return np.array(iso_rate_temp)
+            if sum_ymgal_outer > 0.0:
+                iso_rate_temp = cooling_rate * ymgal_outer / sum_ymgal_outer
+            else:
+                iso_rate_temp = np.zeros(self.inner.nb_isotopes)
 
         # If this is not a star forming galaxy, there is not inflow
         else:
+
             # Calculate the free-fall timescale [yr]
             if self.t_inflow > 0.0:
                 t_ff_temp = self.t_inflow
@@ -1093,149 +1758,85 @@ class omega_plus():
                 t_ff_temp = self.t_ff_cte * self.f_t_ff * 0.1 * (1.0 + \
                     self.inner.redshift_t[i_step_OMEGA])**((-1.5)*self.t_ff_index) / \
                         self.inner.H_0 * 9.7759839e11
-            self.t_cool[i_step_OMEGA] = copy.deepcopy(t_ff_temp)
-            return np.zeros(self.inner.nb_isotopes)
+            self.t_cool[i_step_OMEGA] = t_ff_temp
 
+            # Return zero inflow rate
+            iso_rate_temp = np.zeros(self.inner.nb_isotopes)
 
-    ##############################################
-    #                Evolve Outer                #
-    ##############################################
-    def __evolve_outer(self, m_lost, m_added, i_step_OMEGA):
-
-        '''
-        Evolve the outer region by adding and removing mass
-
-        Arguments
-        =========
-
-          m_lost :  Total mass transfered from the inner to the outer region
-          m_added : Mass transfered from the outer to the inner region
-          i_step_OMEGA : Timestep index
-
-        Notes
-        =====
-
-          The m_added parameter can either be total mass, or isotope masses.
-
-          A - In OMEGA, inflows are applied before outflows. We thus need
-          to remove gas from the outer region before adding the galactic
-          inflows coming from the inner region.
-
-          B - Outflows are the last process treated in an OMEGA timestep.
-          Therefore, we can use the modified composition of the inner region
-          (once star formation, stellar ejecta, and inflows are considered).
-          This refers to the composition of the (i_step_OMEGA+1) timestep.
-
-        '''
-
-        # Convert the m_added total mass into individual isotopes .. if needed
-        sum_ymgal_outer_temp =  np.sum(self.ymgal_outer[i_step_OMEGA])
-        if type(m_added) == float:
-            if sum_ymgal_outer_temp <= 0.0:
-                f_added = 0.0
-                m_added = np.zeros(self.inner.nb_isotopes)
-            else:
-                f_added = m_added / sum_ymgal_outer_temp
-                if f_added > 1.0:
-                    print ('!!Warning, inflows calculated by OMEGA exceed mass in outer region!!')
-                    f_added = 1.0
-                m_added = f_added * self.ymgal_outer[i_step_OMEGA]
-
-        # Remove gas from the outer region (modify the state of the next timestep)
-        self.ymgal_outer[i_step_OMEGA+1] = self.ymgal_outer[i_step_OMEGA] - m_added
-        if np.sum(self.ymgal_outer[i_step_OMEGA+1]) < 0.0:
-            self.ymgal_outer[i_step_OMEGA+1] *= 0.0
-
-        # Calculate the mass fraction of each isotopes that will be added to the
-        # outer region, relative to the total mass of the inner at dt+1
-        sum_inner_ymgal_temp = np.sum(self.inner.ymgal[i_step_OMEGA+1])
-        if sum_inner_ymgal_temp > 0.0:
-
-            # Add gas added in the outer region (lost by the inner)
-            f_add_temp = self.inner.m_outflow_t[i_step_OMEGA] / sum_inner_ymgal_temp
-            self.ymgal_outer[i_step_OMEGA+1] +=  \
-                f_add_temp * np.array(self.inner.ymgal[i_step_OMEGA+1])
-
-        # If the outer region's mass follow the dark matter mass ..
-        if self.halo_in_out_on:
-
-            # Correct for the dark matter mass change
-            self.__correct_outer_for_DM_variation(i_step_OMEGA)
-
-        # Eject mass from the halo into the intergalactic medium
-        self.__eject_halo(i_step_OMEGA)
-
-        # If the halo is a sub-halo ..
-        if self.is_sub[i_step_OMEGA]:
-
-            # Remove all the gas of inside the CGM
-            self.ymgal_outer[i_step_OMEGA+1] *= 0.0
-
-        # Calculate the total gas mass of the outer region
-        self.sum_ymgal_outer[i_step_OMEGA+1] = np.sum(self.ymgal_outer[i_step_OMEGA+1])
-
-        # Calculate the metallicity of the outer region
-        self.__calculate_outer_Z(i_step_OMEGA+1)
- 
+        return iso_rate_temp
 
     ##############################################
-    #       Correct Outer for DM Variation       #
+    #         Get Rates for DM variation         #
     ##############################################
-    def __correct_outer_for_DM_variation(self, i_step_OMEGA):
+    def __get_rates_for_DM_variation(self, i_step_OMEGA, sum_ymgal_outer, dtt=0):
 
         '''
         Add gas to the outer region if the dark matter mass increases, or
         remove gas from the outer region if the dark matter mass decreases.
+        This function only returns the rates in [Msun/yr]
 
         Arguments
         =========
 
           i_step_OMEGA : Timestep index
+          sum_ymgal_outer: Current isotopic composition of the CGM
 
         '''
 
-        # Calculate the mass of dark matter added or removed
-        dm_dm = self.inner.m_DM_t[i_step_OMEGA+1] - self.inner.m_DM_t[i_step_OMEGA]
+        # Declare rates [Msun/yr]
+        dm_m_outer_remove = 0.0
+        dm_m_outer_add = 0.0
 
-        # If gas needs to be removed ..
-        if dm_dm < 0.0:
+        # If there is an interaction/correction based on the
+        # dark matter halo mass ..
+        if self.halo_in_out_on:
 
-            # Calculate the fraction of the halo that is not stripped.
-            #f_keep = 1.0 - dm_dm / self.inner.m_DM_t[i_step_OMEGA]
-            f_keep = self.inner.m_DM_t[i_step_OMEGA+1] / self.inner.m_DM_t[i_step_OMEGA]
-
-            # Correct the outer gas for the stripping. Here we use i_step_OMEGA+1,
-            # since this occurs once galactic inflows and outflows have occured.
-            self.ymgal_outer[i_step_OMEGA+1] *= f_keep
-
-        # If gas needs to be added ..
-        elif not self.is_sub[i_step_OMEGA]:
-
-            # Calculate the mass added in the outer gas
-            dm_m_outer = dm_dm * self.f_b_temp
-
-            # Add mass to the outer region with the same composition that
-            # its initial composition. Here we use i_step_OMEGA+1, since
-            # this occurs once galactic inflows and outflows have occured.
-            # - Inner or outer region based on a M_DM threshold
-            iso_add = self.prim_x_frac * dm_m_outer
-            if self.inner.m_DM_t[i_step_OMEGA] > self.m_cold_flow_tresh:
-                self.ymgal_outer[i_step_OMEGA+1] += iso_add
-                #sum_temp = np.sum(self.ymgal_outer[i_step_OMEGA+1])
-                #f_temp = (dm_m_outer + sum_temp) / sum_temp
-                #self.ymgal_outer[i_step_OMEGA+1] *= f_temp
+            # Interpolate
+            if dtt > 0:
+                m_DM_temp = self.inner.m_DM_t_coef[i_step_OMEGA][0] * \
+                    (self.inner.history.age[i_step_OMEGA]+dtt) + \
+                        self.inner.m_DM_t_coef[i_step_OMEGA][1]
+                m_DM_temp_up = self.inner.m_DM_t_coef[i_step_OMEGA][0] * \
+                    (self.inner.history.age[i_step_OMEGA]+2.0*dtt) + \
+                        self.inner.m_DM_t_coef[i_step_OMEGA][1]
+                timestep_temp = dtt
             else:
-                self.inner.ymgal[i_step_OMEGA+1] += iso_add
+                m_DM_temp = self.inner.m_DM_t[i_step_OMEGA]
+                m_DM_temp_up = self.inner.m_DM_t[i_step_OMEGA+1]
+                timestep_temp = self.inner.history.timesteps[i_step_OMEGA]
+
+            # Calculate the mass of dark matter added or removed
+            dm_dm = m_DM_temp_up - m_DM_temp
+
+            # If gas needs to be removed ..
+            if dm_dm < 0.0:
+
+                # Calculate the fraction of the halo that is not stripped.
+                #f_keep = 1.0 - dm_dm / self.inner.m_DM_t[i_step_OMEGA]
+                f_keep = m_DM_temp_up / m_DM_temp
+
+                # Correct the outer gas for the stripping. Here we use i_step_OMEGA+1,
+                # since this occurs once galactic inflows and outflows have occured.
+                dm_m_outer_remove = sum_ymgal_outer * (1.0-f_keep)
+
+            # If gas needs to be added ..
+            elif not self.is_sub[i_step_OMEGA]:
+
+                # Calculate the mass added in the outer gas
+                dm_m_outer_add = dm_dm * self.f_b_temp
+
+        # Return the rates [Msun/yr]
+        return dm_m_outer_add / timestep_temp, \
+               dm_m_outer_remove / timestep_temp
 
 
     ##############################################
-    #                 Eject Halo                 #
+    #            Get Halo Outflow Rate           #
     ##############################################
-    def __eject_halo(self, i_step_OMEGA):
+    def __get_halo_outflow_rate(self, i_step_OMEGA, dtt = 0):
 
         '''
-        Remove gas from the halo and makes it disapear from the system.
-        Ejection into the intergalactic medium. Eq (10) of Crosby et al. (2015)
+        Return rate to remove gas from the halo. [Msun/yr]
 
         Arguments
         =========
@@ -1253,23 +1854,32 @@ class omega_plus():
         # Calculate the mass ejected from the halo (Crosby et al. 2015)
         else:
 
-            # In OMEGA, R_vir is in [kpc] while in Crosby+15 R_vir is in [Mpc]
-            m_lost = self.gamma_cte * self.nb_ccsne[i_step_OMEGA] * self.epsilon_sne_halo * \
-                (self.inner.r_vir_DM_t[i_step_OMEGA]*0.001 / \
-                    self.inner.m_DM_t[i_step_OMEGA])**self.halo_out_index
-
-        # Remove the mass from the halo (make sure to limit the mass ejected)
-        if m_lost > 0.0:
-            if m_lost > np.sum(self.ymgal_outer[i_step_OMEGA+1]):
-                if not self.inner.print_off:
-                    print ('Halo outflow empties the halo!!')
-                self.ymgal_outer[i_step_OMEGA+1] *= 0.0
+            # Interpolate
+            if dtt > 0:
+                m_DM_temp = self.inner.m_DM_t_coef[i_step_OMEGA][0] * \
+                    (self.inner.history.age[i_step_OMEGA]+dtt) + \
+                        self.inner.m_DM_t_coef[i_step_OMEGA][1]
+                r_vir_temp = self.inner.r_vir_DM_t_coef[i_step_OMEGA][0] * \
+                    (self.inner.history.age[i_step_OMEGA]+dtt) + \
+                        self.inner.r_vir_DM_t_coef[i_step_OMEGA][1]
             else:
-                f_remnant = 1.0 - m_lost/np.sum(self.ymgal_outer[i_step_OMEGA+1])
-                self.ymgal_outer[i_step_OMEGA+1] *= f_remnant
+                m_DM_temp = self.inner.m_DM_t[i_step_OMEGA]
+                r_vir_temp = self.inner.r_vir_DM_t[i_step_OMEGA]
 
-        # Keep the mass loss in memory
-        self.m_lost_t[i_step_OMEGA] = m_lost
+
+            # In OMEGA, R_vir is in [kpc] while in Crosby+15 R_vir is in [Mpc]
+            if self.epsilon_sne_halo < 0:
+                m_lost = 0
+            else:
+                m_lost = self.gamma_cte * self.nb_ccsne[i_step_OMEGA] * \
+                    self.epsilon_sne_halo * \
+                    (r_vir_temp*0.001 / m_DM_temp)**self.halo_out_index
+
+        # Return the halo outflow rate [Msun/yr]
+        if dtt > 0:
+            return m_lost / dtt
+        else:
+            return m_lost / self.inner.history.timesteps[i_step_OMEGA]
 
 
     ##############################################
@@ -1290,7 +1900,7 @@ class omega_plus():
         # Calculate the total mass metals
         mmetal = 0.0
         nonmetals = ['H-1','H-2','H-3','He-3','He-4','Li-6','Li-7']
-        for k_coZ in range(0,self.inner.nb_isotopes): 
+        for k_coZ in range(0,self.inner.nb_isotopes):
             if not self.inner.history.isotopes[k_coZ] in nonmetals:
                 mmetal += self.ymgal_outer[i_step_OMEGA][k_coZ]
 
@@ -1319,6 +1929,8 @@ class omega_plus():
           i_step_OMEGA : Timestep index
 
         '''
+
+        print('Warning - This is not ready for integration scheme.')
 
         # Calculate the total current gas mass in the inner region
         self.sum_inner_ymgal_cur = np.sum(self.inner.ymgal[i_step_OMEGA+1])
@@ -1352,7 +1964,7 @@ class omega_plus():
             # Calculate the mass of gas that needs to be added
             if empty_inner:
                 if self.treat_sfe_t:
-                    m_add_temp = self.sfh_t[i_step_OMEGA+1] / self.sfe[i_step_OMEGA+1]  
+                    m_add_temp = self.sfh_t[i_step_OMEGA+1] / self.sfe[i_step_OMEGA+1]
                 else:
                     m_add_temp = self.sfh_t[i_step_OMEGA+1] * \
                           self.inner.t_SF_t[i_step_OMEGA+1] / self.sfe[i_step_OMEGA+1]
@@ -1440,4 +2052,47 @@ class omega_plus():
         out = 'Run time: ' + \
         str(round((t_module.time() - self.start_time),2))+"s"
         return out
+
+
+    ##############################################
+    #               Reaction CLASS               #
+    ##############################################
+    class _Reaction():
+
+        '''
+        Class for reactions
+
+        '''
+
+        #############################
+        #        Constructor        #
+        #############################
+        def __init__(self, target, products, rate):
+
+            '''
+            Initialize the reaction. It takes a target, a single
+            product or a list of products and a rate.
+
+            '''
+
+            self.target = target
+            self.products = products if type(products) is list else [products]
+            self.rate = rate
+
+
+        #############################
+        #      __str__ method       #
+        #############################
+        def __str__(self):
+
+            '''
+            __str__ method for the class, for when using "print"
+
+            '''
+            s = "{} -> {}".format(self.target, self.products[0])
+            for prod in self.products[1:]:
+                s += " + {}".format(prod)
+            s += "; rate = {} 1/y".format(self.rate)
+
+            return s
 
