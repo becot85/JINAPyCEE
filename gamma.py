@@ -28,6 +28,7 @@ Each branch is represented by an OMEGA_SAM or OMEGA simulation:
 # Standard packages
 import numpy as np
 import time as t_module
+import os
 
 # Define where is the working directory
 # This is where the NuPyCEE code will be extracted

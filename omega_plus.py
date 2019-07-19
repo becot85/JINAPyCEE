@@ -51,7 +51,6 @@ nupy_path = os.path.join(nupy_path, "NuPyCEE")
 # Import NuPyCEE codes
 import NuPyCEE.read_yields as ry
 import NuPyCEE.omega as omega
-import NuPyCEE.decay_module as decay_module
 
 
 #####################
@@ -133,6 +132,12 @@ class omega_plus():
                  nb_inter_lifetime_points=np.array([]), nb_inter_M_points_pop3=np.array([]),\
                  inter_M_points_pop3_tree=np.array([]), nb_inter_M_points=np.array([]),\
                  inter_M_points=np.array([]), y_coef_Z_aM_ej=np.array([])):
+
+        # Not implemented yet
+        if len(sne_L_feedback) > 0:
+            print('The sne_L_feedback option is currently not available.')
+            print('Simulation aborded.')
+            return
 
         # Announce the beginning of the simulation
         if not print_off:
@@ -757,9 +762,9 @@ class omega_plus():
             # Get the decay information from the decay module
             # Store all the isotopic information
             prevZZ, prevNN = None, None
-            for ii in range(len(decay_module.iso.reactions)):
+            for ii in range(len(self.inner.decay_module.iso.reactions)):
                 # Z and n of every isotope in the module
-                zz = decay_module.iso.z[ii]; nn = decay_module.iso.n[ii]
+                zz = self.inner.decay_module.iso.z[ii]; nn = self.inner.decay_module.iso.n[ii]
 
                 # If not an element, break
                 if (zz + nn) == 0:
@@ -894,10 +899,10 @@ class omega_plus():
             targ_index = self.all_isotopes_names.index(targ)
 
             # Retrieve the number of reactions
-            n_reacts = decay_module.iso.reactions[targ_index][1]
+            n_reacts = self.inner.decay_module.iso.reactions[targ_index][1]
 
             # Decay rate in 1/year
-            rate = decay_module.iso.decay_constant[targ_index][0] * self.yr_to_sec
+            rate = self.inner.decay_module.iso.decay_constant[targ_index][0] * self.yr_to_sec
             half_life = np.log(2) / rate
 
             # Try to skip reaction if too short
@@ -910,11 +915,11 @@ class omega_plus():
             # are not in cpy_radio_iso
             for jj in range(n_reacts):
                 prod_list = []
-                react_indx = decay_module.iso.reactions[targ_index][jj + 2] - 1
-                react_type = str(decay_module.iso.reaction_types[react_indx])
+                react_indx = self.inner.decay_module.iso.reactions[targ_index][jj + 2] - 1
+                react_type = str(self.inner.decay_module.iso.reaction_types[react_indx])
 
                 # Apply the probability for this branch
-                rate_jj = rate * decay_module.iso.decay_constant[targ_index][jj + 1]
+                rate_jj = rate * self.inner.decay_module.iso.decay_constant[targ_index][jj + 1]
                 half_life_jj = np.log(2) / rate_jj
 
                 # Try to skip reaction if too long
@@ -925,7 +930,7 @@ class omega_plus():
                     continue
 
                 # Get the product index and name
-                prod_index = decay_module.iso.product_isomer[targ_index][jj] - 1
+                prod_index = self.inner.decay_module.iso.product_isomer[targ_index][jj] - 1
                 if prod_index == targ_index and "SF" not in react_type:
                     s = "Warning: {} decaying into itself! ".format(targ)
                     s += "However, the module does not currently track "
@@ -945,8 +950,8 @@ class omega_plus():
                     # Never skip a fission if we arrive here
                     skip_elem = False
 
-                    fission_index = decay_module.iso.reactions[targ_index][0]
-                    fiss_vect = decay_module.iso.s_fission_vector[fission_index]
+                    fission_index = self.inner.decay_module.iso.reactions[targ_index][0]
+                    fiss_vect = self.inner.decay_module.iso.s_fission_vector[fission_index]
                     for kk in range(len(self.all_isotopes_names)):
                         if fiss_vect[kk] > 0:
                             fiss_prods.append(self.all_isotopes_names[kk])
@@ -957,10 +962,10 @@ class omega_plus():
                     # Store the products and the probability of each channel
                     if targ in skipped_elements:
                         skipped_elements[targ].append([prod_list,\
-                                decay_module.iso.decay_constant[targ_index][jj + 1]])
+                                self.inner.decay_module.iso.decay_constant[targ_index][jj + 1]])
                     else:
                         skipped_elements[targ] = [[prod_list,\
-                                decay_module.iso.decay_constant[targ_index][jj + 1]]]
+                                self.inner.decay_module.iso.decay_constant[targ_index][jj + 1]]]
                 else:
                     # If the reaction is not skipped, just add it
                     if len(fiss_prods) > 0:
@@ -1594,7 +1599,6 @@ class omega_plus():
         # If the outflow follows the SNe energy (delayed outflows) ..
         else:
 
-            print('NOT READY YET!!!!')
             return -1
 
             # Calculate the SSP mass
