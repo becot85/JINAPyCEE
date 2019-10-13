@@ -1210,9 +1210,10 @@ class omega_plus():
                         final_sfr += np.abs(t_total_sfr[-1][-2])
                         total_m_added += np.abs(t_m_added[-1][-2])
                         total_m_lost += np.abs(t_m_lost[-1][-2])
-                        total_m_added_radio += np.abs(t_m_added_radio[-1][-2])
-                        final_decayed_into = np.abs(t_decayed_into[-1][-2])
-                        final_decayed_into_radio = np.abs(t_decayed_into_radio[-1][-2])
+                        if self.inner.len_decay_file > 0:
+                            total_m_added_radio += np.abs(t_m_added_radio[-1][-2])
+                            final_decayed_into = np.abs(t_decayed_into[-1][-2])
+                            final_decayed_into_radio = np.abs(t_decayed_into_radio[-1][-2])
                         converged = True
                     else:
                         converged = False
@@ -1492,13 +1493,13 @@ class omega_plus():
         # ->>>> gas_agb_{i + 1} = gas_agb_i + mdot_agb +\
         #                        (tot_gas_{i + 1} - tot_gas_i - mdot - inflow)*F
         #
-        # F = gas_agb_i/total_gas_i
+        # F = gas_agb_i/tot_gas_i
         #
 
         # This is constant in every operation: what is between parenthesis
         change = mgal_init - self.inner.ymgal[i_step_OMEGA] -\
                 self.inner.mdot[i_step_OMEGA] - total_m_added
-        change /= self.sum_inner_ymgal_cur
+        change /= self.inner.ymgal[i_step_OMEGA] + self.min_val*1e-2
 
         # Massive stars contribution
         self.__update_single_source(self.inner.ymgal_massive,\
@@ -1537,7 +1538,7 @@ class omega_plus():
         '''
 
         source[i_step_OMEGA + 1] = source[i_step_OMEGA] +\
-                source_mdot[i_step_OMEGA] + change*np.sum(source[i_step_OMEGA])
+                source_mdot[i_step_OMEGA] + change*source[i_step_OMEGA]
 
 
     ##############################################
@@ -1568,7 +1569,7 @@ class omega_plus():
         #                        (tot_gas_{i + 1} - tot_gas_i - mdot - inflow)*F +\
         #                         decayed_into*(G - F)
         #
-        # F = gas_agb_i/total_gas_i
+        # F = gas_agb_i/tot_gas_i
         #
         # decayed_into_from_agb = decayed_into*G
         # G = gas_agb_radio_i/total_gas_radio_i*decay_mask
@@ -1731,7 +1732,7 @@ class omega_plus():
             indx = self.inner.history.isotopes.index(isot)
 
             decayModification[indx] += np.sum(self.decay_to_stable[ii]/\
-                                              sum_decay * coeff)
+                                              (sum_decay + self.min_val) * coeff)
 
         # Final step with (G - F)
         source[i_step_OMEGA + 1] += change_decay * (decayModification -\
@@ -1769,7 +1770,7 @@ class omega_plus():
         decayModification = decay_positive * 0
         for ii in range(self.inner.nb_radio_iso):
             decayModification[ii] += np.sum(self.decay_to_radio[ii]/\
-                                              sum_decay * coeff)
+                                            (sum_decay + self.min_val) * coeff)
 
         # Final step with (G - F)
         source[i_step_OMEGA + 1] += decay_positive[:lenSource] * \
