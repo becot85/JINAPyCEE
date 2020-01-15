@@ -597,6 +597,27 @@ class omega_plus():
             else:
                 self.ymgal_outer_radio.append(np.array([0.0]))
 
+        # Declare all stable outer arrays
+        self.ymgal_outer_massive = [arr*0 for arr in self.ymgal_outer]
+        self.ymgal_outer_agb = [arr*0 for arr in self.ymgal_outer]
+        self.ymgal_outer_1a = [arr*0 for arr in self.ymgal_outer]
+        self.ymgal_outer_nsm = [arr*0 for arr in self.ymgal_outer]
+        self.ymgal_outer_bhnsm = [arr*0 for arr in self.ymgal_outer]
+        self.ymgal_outer_extra = []
+        for extra in self.inner.ymgal_delayed_extra:
+            self.ymgal_outer_extra.append([arr*0 for arr in self.ymgal_outer])
+
+        # Now the radio ones
+        self.ymgal_outer_massive_radio = [arr*0 for arr in self.ymgal_outer_radio]
+        self.ymgal_outer_agb_radio = [arr*0 for arr in self.ymgal_outer_radio]
+        self.ymgal_outer_1a_radio = [arr*0 for arr in self.ymgal_outer_radio]
+        self.ymgal_outer_nsm_radio = [arr*0 for arr in self.ymgal_outer_radio]
+        self.ymgal_outer_bhnsm_radio = [arr*0 for arr in self.ymgal_outer_radio]
+        self.ymgal_outer_extra_radio = []
+        for extra in self.inner.ymgal_delayed_extra:
+            self.ymgal_outer_extra_radio.append(\
+                                    [arr*0 for arr in self.ymgal_outer_radio])
+
         # Declare the total mass array
         self.sum_ymgal_outer = [0.0] * (self.inner.nb_timesteps+1)
         self.sum_ymgal_outer[0] = np.sum(self.ymgal_outer[0])
@@ -1142,7 +1163,8 @@ class omega_plus():
             final_sfr = 0
             total_m_added = np.array(mgal_init)*0
             total_m_added_radio = np.array(mgal_radio_init)*0
-            total_m_lost = 0
+            total_m_lost = np.array(mgal_init)*0
+            total_stripped = np.array(mgal_init)*0
 
             HH = totDt; newHH = HH
 
@@ -1155,7 +1177,7 @@ class omega_plus():
                 t_m_cgm = []; t_m_cgm_radio = []
                 t_total_sfr = []; t_m_added = []; t_m_lost = []
                 t_m_added_radio = []; t_decayed_into = []
-                t_decayed_into_radio = []
+                t_decayed_into_radio = []; t_stripped = []
 
                 for ii in range(len(self.substeps)):
                     nn = self.substeps[ii]
@@ -1169,7 +1191,7 @@ class omega_plus():
                     # Unpack
                     m_gal, m_gal_radio, m_cmg, m_cgm_radio, total_sfr,\
                         m_added, m_lost, m_added_radio, decayed_into,\
-                        decayed_into_radio = values
+                        decayed_into_radio, stripped = values
 
                     # Extrapolate according to Deuflhard 1983 but with some
                     # modifications to account for different convergence speed
@@ -1183,11 +1205,12 @@ class omega_plus():
                     t_m_added_radio.append([m_added_radio])
                     t_decayed_into.append([decayed_into])
                     t_decayed_into_radio.append([decayed_into_radio])
+                    t_stripped.append([stripped])
 
                     # Generic extrapolation array:
                     t_extrap = [t_m_gal, t_m_gal_radio, t_m_cgm, t_m_cgm_radio,\
                             t_total_sfr, t_m_added, t_m_lost, t_m_added_radio,\
-                            t_decayed_into, t_decayed_into_radio]
+                            t_decayed_into, t_decayed_into_radio, t_stripped]
 
                     if ii > 0:
                         for kk in range(len(t_m_gal) - 1):
@@ -1215,6 +1238,7 @@ class omega_plus():
                         final_sfr += np.abs(t_total_sfr[-1][-2])
                         total_m_added += np.abs(t_m_added[-1][-2])
                         total_m_lost += np.abs(t_m_lost[-1][-2])
+                        total_stripped += np.abs(t_stripped[-1][-2])
                         if self.inner.len_decay_file > 0:
                             total_m_added_radio += np.abs(t_m_added_radio[-1][-2])
                             final_decayed_into = np.abs(t_decayed_into[-1][-2])
@@ -1248,7 +1272,7 @@ class omega_plus():
                     HH = totDt
 
             # Keep the lost and added values in memory
-            self.inner.m_outflow_t[i_step_OMEGA] = total_m_lost
+            self.inner.m_outflow_t[i_step_OMEGA] = np.sum(total_m_lost)
             self.inner.m_inflow_t[i_step_OMEGA] = np.sum(total_m_added)
 
             # Now that we are out of it, update final values
@@ -1257,7 +1281,8 @@ class omega_plus():
 
             # Update every source by itself
             if not self.inner.pre_calculate_SSPs:
-                self.__update_sources(mgal_init, total_m_added, i_step_OMEGA)
+                self.__update_sources(mgal_init, mcgm_init, total_m_added,\
+                                     total_m_lost, total_stripped, i_step_OMEGA)
 
             # Update the final values for the radioisotopes
             if self.inner.len_decay_file > 0:
@@ -1273,7 +1298,7 @@ class omega_plus():
             # Update original arrays
             self.inner.history.sfr_abs[i_step_OMEGA] = final_sfr /\
                     self.inner.history.timesteps[i_step_OMEGA]
-            self.inner.m_outflow_t[i_step_OMEGA] = total_m_lost
+            self.inner.m_outflow_t[i_step_OMEGA] = np.sum(total_m_lost)
             self.inner.m_locked = final_sfr
 
             # Get the new metallicity of the gas and update history class
@@ -1344,9 +1369,9 @@ class omega_plus():
         isot_mcgm_radio = mcgm_radio_init
 
         # Initialize to zero
-        m_lost = 0; m_added = 0; total_sfr = 0
-        m_added_radio = 0; decayed_into = 0 * mgal_init
-        decayed_into_radio = 0 * mgal_radio_init
+        m_lost = 0 * mgal_init; m_added = 0 * mgal_init; total_sfr = 0
+        stripped = 0 * mgal_init; decayed_into = 0 * mgal_init
+        m_added_radio = 0; decayed_into_radio = 0 * mgal_radio_init
 
         # Introduce the yields for all isotopes
         yield_rate = self.inner.mdot[i_step_OMEGA] / (htm * nn)
@@ -1381,7 +1406,7 @@ class omega_plus():
             or_temp = self.__get_outflow_rate(i_step_OMEGA, sfr_temp, dtt)
             isot_or_temp = or_temp * isot_mgal * inv_mass
             isot_or_temp_radio = or_temp * isot_mgal_radio * inv_mass
-            m_lost += or_temp * htm
+            m_lost += isot_or_temp * htm
 
             # Calculate the galactic inflow rate [Msun/yr] for all isotopes
             ir_iso_temp = self.__get_inflow_rate(i_step_OMEGA, isot_mcgm, dtt)
@@ -1425,6 +1450,9 @@ class omega_plus():
             isot_m_out_cgm = m_out_cgm * isot_mcgm * inv_mass_cgm
             isot_m_out_cgm_radio = m_out_cgm * isot_mcgm_radio * inv_mass_cgm
 
+            # Add both stripping mechanisms (outflow and dark matter)
+            stripped += (isot_removed_cgm + isot_m_out_cgm) * htm
+
             # Get production factors for ymgal_outer and ymgal_outer_radio
             pp = isot_or_temp + isot_added_cgm
             pp_radio = isot_or_temp_radio
@@ -1448,7 +1476,7 @@ class omega_plus():
         # Return the values
         return isot_mgal, isot_mgal_radio, isot_mcgm, isot_mcgm_radio, \
                 total_sfr, m_added, m_lost, m_added_radio, decayed_into,\
-                decayed_into_radio
+                decayed_into_radio, stripped
 
     ##############################################
     #           Get pp, dd from reactions        #
@@ -1480,7 +1508,8 @@ class omega_plus():
     ##############################################
     #       Update the stable gas sources        #
     ##############################################
-    def __update_sources(self, mgal_init, total_m_added, i_step_OMEGA):
+    def __update_sources(self, mgal_init, mcgm_init, total_m_added,\
+                         total_m_lost, total_stripped, i_step_OMEGA):
 
         '''
         Changes the contribution from each source so they are followed
@@ -1489,61 +1518,97 @@ class omega_plus():
         '''
 
         #
-        # Explanation on the operations below
+        # Explanation on the operations below for inner sources
         #
         # ->>>> tot_gas_{i + 1} = tot_gas_i + mdot + inflow - (lock + outflow)
         #
-        # ->>>> gas_agb_{i + 1} = gas_agb_i + mdot_agb - (lock + outflow)*F
+        # ->>>> gas_agb_{i + 1} = gas_agb_i + mdot_agb + inflow*G -\
+        #                         (lock + outflow)*F
         #
-        # ->>>> gas_agb_{i + 1} = gas_agb_i + mdot_agb +\
+        # ->>>> gas_agb_{i + 1} = gas_agb_i + mdot_agb + inflow*G +\
         #                        (tot_gas_{i + 1} - tot_gas_i - mdot - inflow)*F
         #
         # F = gas_agb_i/tot_gas_i
+        # G = gas_agb_outer_i/tot_gas_outer_i
         #
 
-        # This is constant in every operation: what is between parenthesis
+        #
+        # Explanation on the operations below for outer sources
+        #
+        # ->>>> gas_agb_outer_{i + 1} = gas_agb_outer_i - inflow*G + outflow*F\
+        #                               - total_stripped*G
+        #
+
+        # Arrays with sources. Put them in the same order!!!
+        sources = [
+                   self.inner.ymgal_massive,
+                   self.inner.ymgal_agb,
+                   self.inner.ymgal_1a,
+                   self.inner.ymgal_nsm,
+                   self.inner.ymgal_bhnsm,
+                  ]
+
+        sources_outer = [
+                   self.ymgal_outer_massive,
+                   self.ymgal_outer_agb,
+                   self.ymgal_outer_1a,
+                   self.ymgal_outer_nsm,
+                   self.ymgal_outer_bhnsm,
+                  ]
+        mdots = [
+                 self.inner.mdot_massive,
+                 self.inner.mdot_agb,
+                 self.inner.mdot_1a,
+                 self.inner.mdot_nsm,
+                 self.inner.mdot_bhnsm,
+                ]
+
+        # This is constant in every operation: what is between parenthesis in
+        # the explanation above
         change = mgal_init - self.inner.ymgal[i_step_OMEGA] -\
-                self.inner.mdot[i_step_OMEGA] - total_m_added
+                 self.inner.mdot[i_step_OMEGA] - total_m_added
         change /= self.inner.ymgal[i_step_OMEGA] + self.min_val*1e-2
 
-        # Massive stars contribution
-        self.__update_single_source(self.inner.ymgal_massive,\
-                self.inner.mdot_massive, change, i_step_OMEGA)
+        # Adding 0 to use a copy
+        change_outer = total_m_added + 0
+        change_outer /= self.ymgal_outer[i_step_OMEGA] + self.min_val*1e-2
 
-        # AGB stars contribution
-        self.__update_single_source(self.inner.ymgal_agb,\
-                self.inner.mdot_agb, change, i_step_OMEGA)
-
-        # Type Ia SNe contribution
-        self.__update_single_source(self.inner.ymgal_1a,\
-                self.inner.mdot_1a, change, i_step_OMEGA)
-
-        # Neutron star merger contribution
-        self.__update_single_source(self.inner.ymgal_nsm,\
-                self.inner.mdot_nsm, change, i_step_OMEGA)
-
-        # Black hole - Neutron star merger contribution
-        self.__update_single_source(self.inner.ymgal_bhnsm,\
-                self.inner.mdot_bhnsm, change, i_step_OMEGA)
+        # Update contributions
+        for ii in range(len(sources)):
+            sources[ii][i_step_OMEGA + 1] = mdots[ii][i_step_OMEGA] +\
+                                change_outer*sources_outer[ii][i_step_OMEGA] +\
+                                (1 + change)*sources[ii][i_step_OMEGA]
 
         # Other contributions
-        for jj in range(self.inner.nb_delayed_extra):
-            self.__update_single_source(self.inner.ymgal_delayed_extra[jj],\
-                    self.inner.mdot_delayed_extra[jj], change, i_step_OMEGA)
+        for ii in range(self.inner.nb_delayed_extra):
+            source = self.inner.ymgal_delayed_extra[ii]
+            source_outer = self.ymgal_delayed_outer_extra[ii]
+            mdot = self.inner.mdot_delayed_extra[ii]
 
+            source[i_step_OMEGA + 1] = mdot[i_step_OMEGA] +\
+                                      change_outer*source_outer[i_step_OMEGA] +\
+                                      (1 + change)*source[i_step_OMEGA]
 
-    ##############################################
-    #       Update a single stable source        #
-    ##############################################
-    def __update_single_source(self, source, source_mdot, change, i_step_OMEGA):
+        # Same for outer sources
+        change = total_m_lost + 0
+        change /= self.inner.ymgal[i_step_OMEGA] + self.min_val*1e-2
 
-        '''
-        Calculates the contribution of a single source
+        change_outer = total_m_added + total_stripped
+        change_outer /= self.ymgal_outer[i_step_OMEGA] + self.min_val*1e-2
 
-        '''
+        # Update contributions
+        for ii in range(len(sources)):
+            sources_outer[ii][i_step_OMEGA + 1] = \
+                    (1 - change_outer)*sources_outer[ii][i_step_OMEGA] +\
+                    change*sources[ii][i_step_OMEGA]
 
-        source[i_step_OMEGA + 1] = source[i_step_OMEGA] +\
-                source_mdot[i_step_OMEGA] + change*source[i_step_OMEGA]
+        # Other contributions
+        for ii in range(self.inner.nb_delayed_extra):
+            source = self.inner.ymgal_delayed_extra[ii]
+            source_outer = self.ymgal_outer_extra[ii]
+            source_outer[i_step_OMEGA + 1] = \
+                    (1 - change_outer)*source_outer[i_step_OMEGA] +\
+                    change*source[i_step_OMEGA]
 
 
     ##############################################
@@ -1580,6 +1645,29 @@ class omega_plus():
         # G = gas_agb_radio_i/total_gas_radio_i*decay_mask
         #
 
+        # Arrays with sources. Put them in the same order!!!
+        sources = [
+                   self.inner.ymgal_massive,
+                   self.inner.ymgal_agb,
+                   self.inner.ymgal_1a,
+                   self.inner.ymgal_nsm,
+                   self.inner.ymgal_bhnsm,
+                  ]
+        sources_radio = [
+                         self.inner.ymgal_massive_radio,
+                         self.inner.ymgal_agb_radio,
+                         self.inner.ymgal_1a_radio,
+                         self.inner.ymgal_nsm_radio,
+                         self.inner.ymgal_bhnsm_radio,
+                        ]
+        mdots = [
+                 self.inner.mdot_massive_radio,
+                 self.inner.mdot_agb_radio,
+                 self.inner.mdot_1a_radio,
+                 self.inner.mdot_nsm_radio,
+                 self.inner.mdot_bhnsm_radio,
+                ]
+
         # Stable gas
 
         # Get the decay normalization factor
@@ -1587,35 +1675,15 @@ class omega_plus():
         for ii in range(len(self.stable_decayed_isotopes)):
             sum_decay_to_stable += self.decay_to_stable[ii]
 
-        # Massive stars contribution
-        self.__update_single_source_decay(self.inner.ymgal_massive,\
-                self.inner.ymgal_massive_radio, sum_decay_to_stable,\
-                final_decayed_into, i_step_OMEGA)
-
-        # AGB stars contribution
-        self.__update_single_source_decay(self.inner.ymgal_agb,\
-                self.inner.ymgal_agb_radio, sum_decay_to_stable,\
-                final_decayed_into, i_step_OMEGA)
-
-        # Type Ia SNe contribution
-        self.__update_single_source_decay(self.inner.ymgal_1a,\
-                self.inner.ymgal_1a_radio, sum_decay_to_stable,\
-                final_decayed_into, i_step_OMEGA)
-
-        # Neutron star merger contribution
-        self.__update_single_source_decay(self.inner.ymgal_nsm,\
-                self.inner.ymgal_nsm_radio, sum_decay_to_stable,\
-                final_decayed_into, i_step_OMEGA)
-
-        # Black hole - Neutron star merger contribution
-        self.__update_single_source_decay(self.inner.ymgal_bhnsm,\
-                self.inner.ymgal_bhnsm_radio, sum_decay_to_stable,\
-                final_decayed_into, i_step_OMEGA)
+        # Calculate contributions
+        for ii in range(len(sources)):
+            self.__update_single_source_decay(sources[ii], sources_radio[ii],\
+                    sum_decay_to_stable, final_decayed_into, i_step_OMEGA)
 
         # Other contributions
         for jj in range(self.inner.nb_delayed_extra):
             self.__update_single_source_decay(self.inner.ymgal_delayed_extra[jj],\
-                    self.inner.ymgal_delayed_extra_radio, sum_decay_to_stable,\
+                    self.inner.ymgal_delayed_extra_radio[jj], sum_decay_to_stable,\
                     final_decayed_into, i_step_OMEGA)
 
         #
@@ -1650,40 +1718,21 @@ class omega_plus():
         for ii in range(self.inner.nb_radio_iso):
             sum_decay_radio_diff += self.decay_to_radio[ii]
 
-        # Massive stars contribution
-        self.__update_single_source_radio(self.inner.ymgal_massive_radio,\
-                self.inner.mdot_massive_radio, change, sum_decay_radio_diff,\
-                final_decayed_into_radio, i_step_OMEGA)
-
-        # AGB stars contribution
-        self.__update_single_source_radio(self.inner.ymgal_agb_radio,\
-                self.inner.mdot_agb_radio, change, sum_decay_radio_diff,\
-                final_decayed_into_radio, i_step_OMEGA)
-
-        # Type Ia SNe contribution
-        self.__update_single_source_radio(self.inner.ymgal_1a_radio,\
-                self.inner.mdot_1a_radio, change, sum_decay_radio_diff,\
-                final_decayed_into_radio, i_step_OMEGA)
-
-        # Neutron star merger contribution
-        self.__update_single_source_radio(self.inner.ymgal_nsm_radio,\
-                self.inner.mdot_nsm_radio, change, sum_decay_radio_diff,\
-                final_decayed_into_radio, i_step_OMEGA)
-
-        # Black hole - Neutron star merger contribution
-        self.__update_single_source_radio(self.inner.ymgal_bhnsm_radio,\
-                self.inner.mdot_bhnsm_radio, change, sum_decay_radio_diff,\
-                final_decayed_into_radio, i_step_OMEGA)
+        # Calculate contributions
+        for ii in range(len(sources)):
+            self.__update_single_source_radio(sources_radio[ii], mdots[ii],\
+                    change, sum_decay_radio_diff, final_decayed_into_radio,\
+                    i_step_OMEGA)
 
         # Other contributions
         for jj in range(self.inner.nb_delayed_extra):
             self.__update_single_source_radio(self.inner.ymgal_delayed_extra_radio[jj],\
-                    self.inner.mdot_delayed_extra_radio, change, sum_decay_radio_diff,\
+                    self.inner.mdot_delayed_extra_radio[jj], change, sum_decay_radio_diff,\
                     final_decayed_into_radio, i_step_OMEGA)
 
         # Make sure that all contributions are scaled to total gas
 
-        # Create a list with the sources
+        # Create a list with the sources in the last timestep
         allSources = [self.inner.ymgal_massive_radio[i_step_OMEGA + 1],\
                       self.inner.ymgal_agb_radio[i_step_OMEGA + 1],\
                       self.inner.ymgal_1a_radio[i_step_OMEGA + 1],\
