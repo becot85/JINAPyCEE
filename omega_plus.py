@@ -13,6 +13,8 @@ FEB2017: B. Cote
 FEB2019: A. Yagüe, B. Cote
 - Optimized to code to run faster
 
+JAN2020: A. Yagüe
+- Added tracking of enrichment sources in cgm
 
 Definitions
 
@@ -1118,7 +1120,7 @@ class omega_plus():
             m_added = ir_iso_temp * totDt
             sum_m_added = np.sum(m_added)
             if self.f_halo_to_gal_out >= 0.0:
-                self.m_lost_for_halo = m_lost
+                self.m_lost_for_halo = m_lost + 0.0
 
             # Limit the inflow rate if needed (the outflow rate is considered in OMEGA)
             if sum_m_added > np.sum(self.ymgal_outer[i_step_OMEGA]):
@@ -1392,17 +1394,17 @@ class omega_plus():
         isot_mcgm_radio = mcgm_radio_init
 
         # Initialize to zero
-        total_sfr = 0
-        m_added = 0 * mgal_init
-        m_lost = 0 * mgal_init
-        m_added_radio = 0 * mgal_radio_init
-        m_lost_radio = 0* mgal_radio_init
-        stripped = 0 * mgal_init
-        stripped_radio = 0 * mgal_radio_init
-        decayed_into = 0 * mgal_init
-        decayed_into_radio = 0 * mgal_radio_init
-        decayed_into_outer = 0 * mgal_init
-        decayed_into_outer_radio = 0 * mgal_radio_init
+        total_sfr = 0.
+        m_added = 0. * mgal_init
+        m_lost = 0. * mgal_init
+        m_added_radio = 0. * mgal_radio_init
+        m_lost_radio = 0. * mgal_radio_init
+        stripped = 0. * mgal_init
+        stripped_radio = 0. * mgal_radio_init
+        decayed_into = 0. * mgal_init
+        decayed_into_radio = 0. * mgal_radio_init
+        decayed_into_outer = 0. * mgal_init
+        decayed_into_outer_radio = 0. * mgal_radio_init
 
         # Introduce the yields for all isotopes
         yield_rate = self.inner.mdot[i_step_OMEGA] / (htm * nn)
@@ -1475,7 +1477,7 @@ class omega_plus():
             # Get rates for intergalactic to circumgalactic flows
             added_cgm, removed_cgm = self.__get_rates_for_DM_variation(i_step_OMEGA,\
                     current_mcgm, dtt)
-            m_out_cgm = self.__get_halo_outflow_rate(i_step_OMEGA, dtt)
+            m_out_cgm = self.__get_halo_outflow_rate(i_step_OMEGA, dtt, sfr_temp)
             isot_added_cgm = added_cgm * self.prim_x_frac
             isot_removed_cgm = removed_cgm * isot_mcgm * inv_mass_cgm
             isot_removed_cgm_radio = removed_cgm * isot_mcgm_radio * inv_mass_cgm
@@ -2361,7 +2363,7 @@ class omega_plus():
     ##############################################
     #            Get Halo Outflow Rate           #
     ##############################################
-    def __get_halo_outflow_rate(self, i_step_OMEGA, dtt = 0):
+    def __get_halo_outflow_rate(self, i_step_OMEGA, dtt = 0, sfr_temp = 0):
 
         '''
         Return rate to remove gas from the halo. [Msun/yr]
@@ -2377,7 +2379,10 @@ class omega_plus():
         if self.f_halo_to_gal_out >= 0.0:
 
             # Use the galactic outflow rate times the input factor
-            m_lost = self.m_lost_for_halo * self.f_halo_to_gal_out
+            if dtt > 0:
+                return self.f_halo_to_gal_out * self.__get_outflow_rate(i_step_OMEGA, sfr_temp, dtt=dtt)
+            else:
+                m_lost = self.m_lost_for_halo * self.f_halo_to_gal_out
 
         # Calculate the mass ejected from the halo (Crosby et al. 2015)
         else:
