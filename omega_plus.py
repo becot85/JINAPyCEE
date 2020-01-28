@@ -1108,12 +1108,12 @@ class omega_plus():
         self.inner.m_outflow_t = np.zeros(self.inner.nb_timesteps)
         self.inner.m_inflow_t = np.zeros(self.inner.nb_timesteps)
 
+        # Create primordial arrays
+        primordial_init = np.array(copy.copy(self.inner.ymgal[0]))
+        primordial_outer_init = np.array(copy.copy(self.ymgal_outer[0]))
+
         # Initialize depending on the number of sources
         if not self.inner.pre_calculate_SSPs:
-
-            # Create primordial arrays
-            primordial_init = copy.deepcopy(self.inner.ymgal[0])
-            primordial_outer_init = copy.deepcopy(self.ymgal_outer[0])
 
             # Create a sources and mdots arrays
             sources = [
@@ -1172,10 +1172,6 @@ class omega_plus():
 
         else:
 
-            # Create primordial arrays
-            primordial_init = [0.]
-            primordial_outer_init = [0.]
-
             # Create a sources and mdots arrays
             sources = [self.inner.ymgal]
             sources_outer = [self.ymgal_outer]
@@ -1183,7 +1179,7 @@ class omega_plus():
             if self.inner.len_decay_file > 0:
                 sources_radio = [self.inner.ymgal_radio]
                 sources_outer_radio = [self.ymgal_outer_radio]
-                mdots_radio = [self.mdot_radio]
+                mdots_radio = [self.inner.mdot_radio]
             else:
                 sources_radio = [[0.] for x in sources]
                 sources_outer_radio = [[0.] for x in sources_outer]
@@ -1245,11 +1241,19 @@ class omega_plus():
 
             # Copy initial values for safekeeping
             mgal_init_split = [np.array(x[i_step_OMEGA]) for x in sources]
+            if self.inner.pre_calculate_SSPs:
+                mgal_init_split[0] = mgal_init_split[0] - primordial_init
             mcgm_init_split = [np.array(x[i_step_OMEGA]) for x in sources_outer]
-            mgal_radio_init_split = [np.array(x[i_step_OMEGA]) for x in \
-                                                            sources_radio]
-            mcgm_radio_init_split = [np.array(x[i_step_OMEGA]) for x in \
-                                                            sources_outer_radio]
+            if self.inner.pre_calculate_SSPs:
+                mcgm_init_split[0] = mcgm_init_split[0] - primordial_outer_init
+            if self.inner.len_decay_file > 0:
+                mgal_radio_init_split = [np.array(x[i_step_OMEGA]) for x in \
+                                                           sources_radio]
+                mcgm_radio_init_split = [np.array(x[i_step_OMEGA]) for x in \
+                                                           sources_outer_radio]
+            else:
+                mgal_radio_init_split = [[0.]]
+                mcgm_radio_init_split = [[0.]]
 
             # Initialize
             final_sfr = 0.;  total_m_added = 0.;  total_m_lost = 0.
@@ -1278,7 +1282,7 @@ class omega_plus():
                                  mdots_radio, mcgm_radio_init_split, htm, nn)
 
                     # Unpack
-                    m_prim, m_gal, m_gal_radio, m_prim_out, m_cmg, m_cgm_radio,\
+                    m_prim, m_gal, m_gal_radio, m_prim_out, m_cgm, m_cgm_radio,\
                         total_sfr, m_added, m_lost = values
 
                     # Extrapolate according to Deuflhard 1983 but with some
@@ -1287,7 +1291,7 @@ class omega_plus():
                     t_m_gal.append([m_gal])
                     t_m_gal_radio.append([m_gal_radio])
                     t_m_prim_out.append([m_prim_out])
-                    t_m_cgm.append([m_cmg])
+                    t_m_cgm.append([m_cgm])
                     t_m_cgm_radio.append([m_cgm_radio])
                     t_total_sfr.append([total_sfr])
                     t_m_added.append([m_added])
@@ -1359,11 +1363,11 @@ class omega_plus():
             self.inner.m_inflow_t[i_step_OMEGA] = total_m_added
 
             # Now that we are out of it, update final values
-            self.inner.ymgal[i_step_OMEGA + 1] = primordial_init
-            self.ymgal_outer[i_step_OMEGA + 1] = primordial_outer_init
+            self.inner.ymgal[i_step_OMEGA + 1] += primordial_init
+            self.ymgal_outer[i_step_OMEGA + 1] += primordial_outer_init
             for ii in range(len(sources)):
-                sources[ii][i_step_OMEGA + 1] = mgal_init_split[ii]
-                sources_outer[ii][i_step_OMEGA + 1] = mcgm_init_split[ii]
+                sources[ii][i_step_OMEGA + 1] += mgal_init_split[ii]
+                sources_outer[ii][i_step_OMEGA + 1] += mcgm_init_split[ii]
                 if not self.inner.pre_calculate_SSPs:
                     self.inner.ymgal[i_step_OMEGA + 1] += mgal_init_split[ii]
                     self.ymgal_outer[i_step_OMEGA + 1] += mcgm_init_split[ii]
@@ -1371,8 +1375,8 @@ class omega_plus():
             # Update the final values for the radioisotopes
             if self.inner.len_decay_file > 0:
                 for ii in range(len(sources_radio)):
-                    sources_radio[ii][i_step_OMEGA + 1] = mgal_radio_init_split[ii]
-                    sources_outer_radio[ii][i_step_OMEGA + 1] = mcgm_radio_init_split[ii]
+                    sources_radio[ii][i_step_OMEGA + 1] += mgal_radio_init_split[ii]
+                    sources_outer_radio[ii][i_step_OMEGA + 1] += mcgm_radio_init_split[ii]
                     if not self.inner.pre_calculate_SSPs:
                         self.inner.ymgal_radio[i_step_OMEGA + 1] += mgal_radio_init_split[ii]
                         self.ymgal_outer_radio[i_step_OMEGA + 1] += mcgm_radio_init_split[ii]
@@ -1447,8 +1451,8 @@ class omega_plus():
         '''
 
         # Store initial values
-        isot_prim = np.array(primordial_init[:])
-        isot_prim_out = np.array(primordial_outer_init[:])
+        isot_prim = np.array(copy.copy(primordial_init))
+        isot_prim_out = np.array(copy.copy(primordial_outer_init))
         isot_mgal = np.array(copy.deepcopy(mgal_init_split))
         isot_mcgm = np.array(copy.deepcopy(mcgm_init_split))
         isot_mgal_radio = np.array(copy.deepcopy(mgal_radio_init_split))
@@ -1501,7 +1505,6 @@ class omega_plus():
             ir_iso_temp = self.__get_inflow_rate(i_step_OMEGA, current_mcgm, dtt)
             ir_iso_prim = ir_iso_temp * isot_prim_out * inv_mass_cgm
             ir_iso_split = ir_iso_temp * isot_mcgm * inv_mass_cgm
-
             ir_iso_split_radio = ir_iso_temp * isot_mcgm_radio * inv_mass_cgm
             m_added += ir_iso_temp * htm
 
@@ -1534,10 +1537,10 @@ class omega_plus():
                     current_mcgm, dtt)
             m_out_cgm = self.__get_halo_outflow_rate(i_step_OMEGA, dtt, sfr_temp)
             isot_added_cgm = added_cgm * self.prim_x_frac
-            isot_removed_cgm_prim = removed_cgm * isot_prim * inv_mass_cgm
+            isot_removed_cgm_prim = removed_cgm * isot_prim_out * inv_mass_cgm
             isot_removed_cgm_split = removed_cgm * isot_mcgm * inv_mass_cgm
             isot_removed_cgm_split_radio = removed_cgm * isot_mcgm_radio * inv_mass_cgm
-            isot_m_out_cgm_prim = m_out_cgm * isot_prim * inv_mass_cgm
+            isot_m_out_cgm_prim = m_out_cgm * isot_prim_out * inv_mass_cgm
             isot_m_out_cgm_split = m_out_cgm * isot_mcgm * inv_mass_cgm
             isot_m_out_cgm_split_radio = m_out_cgm * isot_mcgm_radio * inv_mass_cgm
 
@@ -1586,12 +1589,11 @@ class omega_plus():
         dd_radio += self.decay_from_radio
 
         # For radioactive isotopes
-        pp_radio = np.transpose(pp_radio)
+        pp_radio_t = np.transpose(pp_radio)
         for ii in range(self.inner.nb_radio_iso):
-            pp_radio[ii] += np.sum(self.decay_to_radio[ii] * isot_mass_radio,\
+            pp_radio_t[ii] += np.sum(self.decay_to_radio[ii] * isot_mass_radio,\
                                    axis = 1)
-        # TODO do I have to transpose back?
-        pp_radio = np.transpose(pp_radio)
+        pp_radio = np.transpose(pp_radio_t)
 
         # For stable isotopes
         pp = np.transpose(pp)
