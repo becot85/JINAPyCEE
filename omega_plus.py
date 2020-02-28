@@ -2186,6 +2186,89 @@ class omega_plus():
 
 
     ##############################################
+    #              Get Isolation Time            #
+    ##############################################
+    def get_isolation_time(self, isotope, value, timeSun):
+
+        '''
+        Calculate the isolation time for the desired isotope or ratio of isotopes
+
+        Parameters
+        ----------
+
+        '''
+
+        # Check whether this is an isotope or a ratio of isotopes
+        splt = isotope.split("/")
+        if len(splt) == 1:
+            isotope2 = None
+        else:
+            isotope, isotope2 = splt
+
+        # Get indices and decay rates for isotopes
+        stableList = list(self.inner.history.isotopes)
+        radioList = list(self.inner.radio_iso)
+
+        rate = 0
+        if isotope in radioList:
+            indx = radioList.index(isotope)
+            gas = np.transpose(self.inner.ymgal_radio)[indx]
+
+            for reac in self.reac_dictionary[isotope]:
+                rate += reac.rate
+
+        elif isotope in stableList:
+            indx = stableList.index(isotope)
+            gas = np.transpose(self.inner.ymgal)[indx]
+        else:
+            print("Isotope {} not in omega".format(isotope))
+            return None
+
+        rate2 = 0
+        if isotope2 is not None:
+            if isotope2 in radioList:
+                indx2 = radioList.index(isotope2)
+                gas2 = np.transpose(self.inner.ymgal_radio)[indx2]
+
+                for reac in self.reac_dictionary[isotope2]:
+                    rate2 += reac.rate
+
+            elif isotope2 in stableList:
+                indx2 = stableList.index(isotope2)
+                gas2 = np.transpose(self.inner.ymgal)[indx2]
+            else:
+                print("Isotope {} not in omega".format(isotope2))
+                return None
+
+        # Calculate the equivalent rate
+        # (doesn't matter what situation, always works)
+        rateEq = rate - rate2
+
+        # Look for the lowest time index
+        timesArr = self.inner.history.age
+        for ii in range(len(self.inner.history.age)):
+            if timesArr[ii] >= timeSun:
+                i1 = ii - 1
+                i2 = ii
+                break
+
+        # Take the value of the isotopes at the time timeSun
+        lt1 = np.log(timesArr[i1]); lt2 = np.log(timesArr[i2])
+        lg1 = np.log(gas[i1]); lg2 = np.log(gas[i2])
+        mm = (lg2 - lg1)/(lt2 - lt1)
+        valueISM = np.exp(mm*(np.log(timeSun) - lt1) + lg1)
+        if isotope2 is not None:
+            lg1 = np.log(gas2[i1]); lg2 = np.log(gas2[i2])
+            mm = (lg2 - lg1)/(lt2 - lt1)
+            valueISM2 = np.exp(mm*(np.log(timeSun) - lt1) + lg1)
+
+            valueISM /= valueISM2
+
+        # Now just return the isolation time
+        return -np.log(value/valueISM)/rateEq
+
+
+    ##############################################
     #                  Get Time                  #
     ##############################################
     def __get_time(self):
