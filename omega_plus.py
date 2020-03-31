@@ -2186,6 +2186,23 @@ class omega_plus():
 
 
     ##############################################
+    #              Get Isolation Time            #
+    ##############################################
+    def get_isolation_time(self, isotope, value, time_sun):
+
+        '''
+        Wrapper for get_isolation_time in NuPyCEE/omega.py
+
+        Parameters
+        ----------
+
+        '''
+
+        return self.inner.get_isolation_time(isotope = isotope, value = value,
+                time_sun = time_sun, reac_dictionary = self.reac_dictionary)
+
+
+    ##############################################
     #                  Get Time                  #
     ##############################################
     def __get_time(self):
