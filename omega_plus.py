@@ -70,7 +70,7 @@ class omega_plus():
                  mgal=1.0, transitionmass=8, ini_alpha=True, \
                  table='yield_tables/agb_and_massive_stars_nugrid_MESAonly_fryer12delay.txt', \
                  table_radio='', decay_file='', sn1a_table_radio='',\
-                 bhnsmerger_table_radio='', nsmerger_table_radio='',\
+                 nsmerger_table_radio='',\
                  nsmerger_table = 'yield_tables/r_process_arnould_2007.txt', \
                  sn1a_table='yield_tables/sn1a_t86.txt', radio_refinement=1, \
                  pop3_table='yield_tables/popIII_heger10.txt', \
@@ -175,7 +175,6 @@ class omega_plus():
             sn1a_on=sn1a_on, sn1a_table=sn1a_table, ns_merger_on=ns_merger_on, \
             table_radio=table_radio, decay_file=decay_file,\
             sn1a_table_radio=sn1a_table_radio, nb_nsm_per_m=nb_nsm_per_m,\
-            bhnsmerger_table_radio=bhnsmerger_table_radio,\
             nsmerger_table_radio=nsmerger_table_radio, ism_ini_radio=ism_ini_radio,\
             f_binary=f_binary, f_merger=f_merger, t_merger_max=t_merger_max, \
             m_ej_nsm=m_ej_nsm, nsmerger_table=nsmerger_table, iniabu_table=iniabu_table, \
@@ -604,7 +603,6 @@ class omega_plus():
         self.ymgal_outer_agb = [arr*0. for arr in self.ymgal_outer]
         self.ymgal_outer_1a = [arr*0. for arr in self.ymgal_outer]
         self.ymgal_outer_nsm = [arr*0. for arr in self.ymgal_outer]
-        self.ymgal_outer_bhnsm = [arr*0. for arr in self.ymgal_outer]
         self.ymgal_outer_extra = []
         for extra in self.inner.ymgal_delayed_extra:
             self.ymgal_outer_extra.append([arr*0. for arr in self.ymgal_outer])
@@ -614,7 +612,6 @@ class omega_plus():
         self.ymgal_outer_agb_radio = [arr*0. for arr in self.ymgal_outer_radio]
         self.ymgal_outer_1a_radio = [arr*0. for arr in self.ymgal_outer_radio]
         self.ymgal_outer_nsm_radio = [arr*0. for arr in self.ymgal_outer_radio]
-        self.ymgal_outer_bhnsm_radio = [arr*0. for arr in self.ymgal_outer_radio]
         self.ymgal_outer_extra_radio = []
         for extra in self.inner.ymgal_delayed_extra:
             self.ymgal_outer_extra_radio.append(\
@@ -845,7 +842,6 @@ class omega_plus():
         self.inner.ymgal_agb_radio = copy.deepcopy(zeroArr)
         self.inner.ymgal_1a_radio = copy.deepcopy(zeroArr)
         self.inner.ymgal_nsm_radio = copy.deepcopy(zeroArr)
-        self.inner.ymgal_bhnsm_radio = copy.deepcopy(zeroArr)
         for ii in range(self.inner.nb_delayed_extra_radio):
             self.inner.ymgal_delayed_extra_radio[ii] = copy.deepcopy(zeroArr)
 
@@ -854,7 +850,6 @@ class omega_plus():
         self.ymgal_outer_agb_radio = copy.deepcopy(zeroArr)
         self.ymgal_outer_1a_radio = copy.deepcopy(zeroArr)
         self.ymgal_outer_nsm_radio = copy.deepcopy(zeroArr)
-        self.ymgal_outer_bhnsm_radio = copy.deepcopy(zeroArr)
         self.ymgal_outer_extra_radio = []
         for ii in range(self.inner.nb_delayed_extra_radio):
             self.ymgal_outer_extra_radio.append(copy.deepcopy(zeroArr))
@@ -1121,7 +1116,6 @@ class omega_plus():
                        self.inner.ymgal_agb,
                        self.inner.ymgal_1a,
                        self.inner.ymgal_nsm,
-                       self.inner.ymgal_bhnsm,
                       ]
             sources += [x for x in self.inner.ymgal_delayed_extra]
             sources_outer = [
@@ -1129,7 +1123,6 @@ class omega_plus():
                        self.ymgal_outer_agb,
                        self.ymgal_outer_1a,
                        self.ymgal_outer_nsm,
-                       self.ymgal_outer_bhnsm,
                       ]
             sources_outer += [x for x in self.ymgal_outer_extra]
             mdots = [
@@ -1137,7 +1130,6 @@ class omega_plus():
                      self.inner.mdot_agb,
                      self.inner.mdot_1a,
                      self.inner.mdot_nsm,
-                     self.inner.mdot_bhnsm,
                     ]
             mdots += [x for x in self.inner.mdot_delayed_extra]
             if self.inner.len_decay_file > 0:
@@ -1146,7 +1138,6 @@ class omega_plus():
                                  self.inner.ymgal_agb_radio,
                                  self.inner.ymgal_1a_radio,
                                  self.inner.ymgal_nsm_radio,
-                                 self.inner.ymgal_bhnsm_radio,
                                 ]
                 sources_radio += [x for x in self.inner.ymgal_delayed_extra_radio]
                 sources_outer_radio = [
@@ -1154,7 +1145,6 @@ class omega_plus():
                            self.ymgal_outer_agb_radio,
                            self.ymgal_outer_1a_radio,
                            self.ymgal_outer_nsm_radio,
-                           self.ymgal_outer_bhnsm_radio,
                           ]
                 sources_outer_radio += [x for x in self.ymgal_outer_extra_radio]
                 mdots_radio = [
@@ -1162,7 +1152,6 @@ class omega_plus():
                          self.inner.mdot_agb_radio,
                          self.inner.mdot_1a_radio,
                          self.inner.mdot_nsm_radio,
-                         self.inner.mdot_bhnsm_radio,
                         ]
                 mdots_radio += [x for x in self.inner.mdot_delayed_extra_radio]
             else:
