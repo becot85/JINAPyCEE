@@ -1,8 +1,6 @@
 JINAPyCEE
 =========
 
-Hackathon branch
-
 Public <a href="http://www.jinaweb.org/">JINA</a> Python Chemical Evolution Environment
 
 This repository contains a series of multi-zone galactic chemical evolution codes written in Python 3. It represents an extension of the <a href="http://github.com/NuGrid/NuPyCEE">NuPyCEE</a> package (see also our <a href="http://nugrid.github.io/NuPyCEE/">website</a>) and the end point of the <a href="http://www.jinaweb.org/">JINA</a>-<a href="http://www.nugridstars.org/">NuGrid</a> chemical evolution pipeline (see <a href="http://adsabs.harvard.edu/abs/2017nuco.confb0203C">Côté et al. 2017a</a>).
