@@ -576,7 +576,7 @@ class omega_plus():
 
         # Create ymgal_outer_radio
         self.ymgal_outer_radio = []
-        if self.inner.len_decay_file:
+        if self.inner.len_decay_file > 0 or self.inner.use_decay_module:
             self.ymgal_outer_radio.append(np.array([0.0]*self.inner.nb_radio_iso))
         else:
             self.ymgal_outer_radio.append(np.array([0.0]))
@@ -593,7 +593,7 @@ class omega_plus():
         # Create the next timesteps (+1 to get the final state of the last dt)
         for i_do in range(1, self.inner.nb_timesteps+1):
             self.ymgal_outer.append(np.array([0.0]*self.inner.nb_isotopes))
-            if self.inner.len_decay_file:
+            if self.inner.len_decay_file > 0 or self.inner.use_decay_module:
                 self.ymgal_outer_radio.append(np.array([0.0] * \
                         self.inner.nb_radio_iso))
             else:
@@ -729,7 +729,7 @@ class omega_plus():
         self.reac_dictionary = {}
 
         # If there is not decay, return now
-        if self.inner.len_decay_file == 0:
+        if self.inner.len_decay_file == 0 and not self.inner.use_decay_module:
             return
 
         # Dictionary to store all isotopes
@@ -1140,7 +1140,7 @@ class omega_plus():
                      self.inner.mdot_bhnsm,
                     ]
             mdots += [x for x in self.inner.mdot_delayed_extra]
-            if self.inner.len_decay_file > 0:
+            if self.inner.len_decay_file > 0 or self.inner.use_decay_module:
                 sources_radio = [
                                  self.inner.ymgal_massive_radio,
                                  self.inner.ymgal_agb_radio,
@@ -1176,7 +1176,7 @@ class omega_plus():
             sources = [self.inner.ymgal]
             sources_outer = [self.ymgal_outer]
             mdots = [self.inner.mdot]
-            if self.inner.len_decay_file > 0:
+            if self.inner.len_decay_file > 0 or self.inner.use_decay_module:
                 sources_radio = [self.inner.ymgal_radio]
                 sources_outer_radio = [self.ymgal_outer_radio]
                 mdots_radio = [self.inner.mdot_radio]
@@ -1246,7 +1246,7 @@ class omega_plus():
             mcgm_init_split = [np.array(x[i_step_OMEGA]) for x in sources_outer]
             if self.inner.pre_calculate_SSPs:
                 mcgm_init_split[0] = mcgm_init_split[0] - primordial_outer_init
-            if self.inner.len_decay_file > 0:
+            if self.inner.len_decay_file > 0 or self.inner.use_decay_module:
                 mgal_radio_init_split = [np.array(x[i_step_OMEGA]) for x in \
                                                            sources_radio]
                 mcgm_radio_init_split = [np.array(x[i_step_OMEGA]) for x in \
@@ -1373,7 +1373,7 @@ class omega_plus():
                     self.ymgal_outer[i_step_OMEGA + 1] += mcgm_init_split[ii]
 
             # Update the final values for the radioisotopes
-            if self.inner.len_decay_file > 0:
+            if self.inner.len_decay_file > 0 or self.inner.use_decay_module:
                 for ii in range(len(sources_radio)):
                     sources_radio[ii][i_step_OMEGA + 1] += mgal_radio_init_split[ii]
                     sources_outer_radio[ii][i_step_OMEGA + 1] += mcgm_radio_init_split[ii]
@@ -1463,7 +1463,7 @@ class omega_plus():
 
         # Introduce the yields for all isotopes
         yield_rate = np.array([x[i_step_OMEGA] / (htm * nn) for x in mdots])
-        if self.inner.len_decay_file > 0:
+        if self.inner.len_decay_file > 0 or self.inner.use_decay_module:
             yield_rate_radio = [x[i_step_OMEGA] / (htm * nn) for x in mdots_radio]
 
             # Increase the size of the array if needed
@@ -1521,7 +1521,7 @@ class omega_plus():
                     / (isot_mgal_radio + self.min_val)
 
             # Modify pp_split, pp_split_radio, and dd_split_radio due to decays
-            if self.inner.len_decay_file > 0:
+            if self.inner.len_decay_file > 0 or self.inner.use_decay_module:
                 pp_split, pp_split_radio, dd_split_radio =\
                     self.__get_radio_pp_dd(pp_split, pp_split_radio,\
                     dd_split_radio, isot_mgal_radio)
@@ -1558,7 +1558,7 @@ class omega_plus():
                 + isot_m_out_cgm_split_radio) / (isot_mcgm_radio + self.min_val)
 
             # Modify pp_split, pp_split_radio, and dd_split_radio due to decays
-            if self.inner.len_decay_file > 0:
+            if self.inner.len_decay_file > 0 or self.inner.use_decay_module:
                 pp_split, pp_split_radio, dd_split_radio =\
                     self.__get_radio_pp_dd(pp_split, pp_split_radio,\
                     dd_split_radio, isot_mcgm_radio)
