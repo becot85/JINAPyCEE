@@ -29,6 +29,8 @@ Each branch is represented by an OMEGA_SAM or OMEGA simulation:
 import numpy as np
 import time as t_module
 import os
+import multiprocessing as mp
+import copy
 
 # Define where is the working directory
 # This is where the NuPyCEE code will be extracted
@@ -93,7 +95,7 @@ class gamma():
                  br_ID_merge=np.array([]), br_m_halo=np.array([]), br_is_prim=np.array([]),\
                  br_is_SF=np.array([]), sne_L_feedback=np.array([]),\
                  br_sfe_t=np.array([]), br_sfh=np.array([]),
-                 br_is_sub=np.array([])):
+                 br_is_sub=np.array([]), n_proc = 1):
 
         # Check if we have the trunk ID
         if tree_trunk_ID < 0:
@@ -234,6 +236,7 @@ class gamma():
         self.br_r_vir = br_r_vir
         self.br_is_sub = br_is_sub
         self.mvir_sf_tresh = mvir_sf_tresh
+        self.n_proc = n_proc
 
         # Return if inputs not ok
         if self.len_br_is_SF_t > 0 and self.len_br_is_SF == 0:
@@ -248,6 +251,15 @@ class gamma():
 
         # Announce the end of the simulation
         print ('   GAMMA run completed -',self.__get_time())
+
+    ##############################################
+    #                  Get Time                  #
+    ##############################################
+    def __get_time(self):
+
+        out = 'Run time: ' + \
+        str(round((t_module.time() - self.start_time),2))+"s"
+        return out
 
 
     ##############################################
@@ -307,159 +319,65 @@ class gamma():
 
         '''
 
+        # Define multiprocessing queue
+        if self.n_proc > 1:
+            queue = mp.Queue()
+
         # For each redshift ...
         for i_z_ss in range(0,self.nb_redshifts):
 
-          # For new each branch ...
-          for i_br_ss in range(0,len(self.br_m_halo[i_z_ss])):
+            # Check if each branch is primordial or not and save tuples
+            branches = []; tot_branch = len(self.br_m_halo[i_z_ss])
+            for i_br_ss in range(tot_branch):
 
-            # If it's a primordial branch ...
-            if self.br_is_prim[i_z_ss][i_br_ss]:
+                # If it's a primordial branch ...
+                if self.br_is_prim[i_z_ss][i_br_ss]:
+                    arguments = (self, i_z_ss, i_br_ss)
 
-                # Create an OMEGA instance without merger
-                self.__create_branch(i_z_ss, i_br_ss)
+                # If the branch is the results of a merger ...
+                else:
 
-            # If the branch is the results of a merger ...
+                    # Get the stellar ejecta and the ISM of all parents
+                    mdot, mdot_t, ism, outer, dm, dmo, dmo_t = \
+                        self.__get_mdot_parents(i_z_ss, i_br_ss)
+
+                    arguments = (self, i_z_ss, i_br_ss, dm, mdot, mdot_t, \
+                            ism, outer, dmo, dmo_t)
+
+                # Create the Omega_Branch instance
+                branches.append(Omega_Branch(arguments))
+
+            # Now compute each galaxy
+            if self.n_proc == 1 or tot_branch == 1:
+
+                # Avoid the overhead if only one case or one process
+                for i_br_ss in range(tot_branch):
+                    galaxy = branches[i_br_ss].get_galaxy()
+                    self.galaxy_inst[i_z_ss][galaxy[0]] = galaxy[1]
+
             else:
 
-                # Get the stellar ejecta and the ISM of all parents
-                mdot, mdot_t, ism, outer, dm, dmo, dmo_t = \
-                    self.__get_mdot_parents(i_z_ss, i_br_ss)
+                # Divide the processes in chunks of n_proc
+                i_br_ss = 0
+                while i_br_ss < tot_branch:
 
-                # Create an OMEGA instance with merger
-                self.__create_branch(i_z_ss, i_br_ss, dm, mdot, mdot_t, \
-                    ism, outer, dmo, dmo_t)
+                    # Calculate how many processes to use
+                    use_proc = min(self.n_proc, tot_branch - i_br_ss)
 
+                    # Define and run the processes
+                    for ii in range(use_proc):
+                        process = mp.Process(\
+                            target = lambda q, o: q.put(o.get_galaxy()), \
+                            args = (queue, branches[i_br_ss + ii]))
+                        process.start()
 
-    ##############################################
-    #               Create Branch                 #
-    ##############################################
-    def __create_branch(self, i_z_ss, i_br_ss, dm=-1, mdot_ini=np.array([]), \
-                        mdot_ini_t=np.array([]), ism_ini=np.array([]), \
-                        ymgal_outer_ini=np.array([]), dmo_ini=np.array([]), \
-                        dmo_ini_t=np.array([])):
+                    # Now get values
+                    for ii in range(use_proc):
+                        galaxy = queue.get()
+                        self.galaxy_inst[i_z_ss][galaxy[0]] = galaxy[1]
 
-        '''
-        Create OMEGA to represent a specific branch from a merger tree, until
-        the branch merges.
-
-        Arguments
-        =========
-
-          i_z_ss: Redshift index
-          i_br_ss: Branch index
-          dm: Combined dark matter mass of the progenitors
-          mdot_ini: Future stellar ejecta of the merged stellar populations
-          mdot_ini_t: Times associated with the future ejecta
-          ism_ini: Mass and composition of the merged inner gas reservoir
-          ymgal_outer_ini: Mass and composition of the merged outer gas reservoir
-          dmo_ini: Future outflow ejecta of the merged SNe (feedback)
-          dmo_ini_t: Times associated with the future outflow ejecta
-
-        '''
-
-        # Assign the combined SSP, ISM gas, outflow (needs to be in create_omega)
-        self.mdot_ini = mdot_ini
-        self.mdot_ini_t = mdot_ini_t
-        self.ism_ini = ism_ini
-        self.ymgal_outer_ini = ymgal_outer_ini
-        self.dmo_ini = dmo_ini
-        self.dmo_ini_t = dmo_ini_t
-
-        # Calculate the duration of the OMEGA instance
-        self.tend = self.times[-1] - self.times[i_z_ss] + \
-                   (self.times[-1] - self.times[-2]) # Extra step for the trunk
-
-        # Assign the DM array
-        self.DM_array = []
-        for i_cb in range(0,len(self.br_age[i_z_ss][i_br_ss])):
-            self.DM_array.append([0.0]*2)
-            self.DM_array[i_cb][0] = self.br_age[i_z_ss][i_br_ss][i_cb]
-            self.DM_array[i_cb][1] = self.br_m_halo[i_z_ss][i_br_ss][i_cb]
-        self.DM_array = np.array(self.DM_array)
-
-        # Assign the R_vir array
-        self.r_vir_array = []
-        for i_cb in range(0,len(self.br_age[i_z_ss][i_br_ss])):
-            self.r_vir_array.append([0.0]*2)
-            self.r_vir_array[i_cb][0] = self.br_age[i_z_ss][i_br_ss][i_cb]
-            self.r_vir_array[i_cb][1] = self.br_r_vir[i_z_ss][i_br_ss][i_cb]
-        self.r_vir_array = np.array(self.r_vir_array)
-
-        # Assign whether or not the branch will be a sub-halo at some point
-        self.is_sub_array = np.array([])
-        if self.is_sub_info:
-            for i_cb in range(0,len(self.br_is_sub[i_z_ss][i_br_ss])):
-                self.is_sub_array.append([0.0]*2)
-                self.is_sub_array[i_cb][0] = self.br_age[i_z_ss][i_br_ss][i_cb]
-                self.is_sub_array[i_cb][1] = self.br_is_sub[i_z_ss][i_br_ss][i_cb]
-
-        # Add mass depending on the dark matter mass ratio.
-        # This is because the sum of dark matter masses from the progenitors
-        # sometime does not equal the initial dark matter mass of the new branch..
-        if dm > 0.0:
-            self.__correct_initial_state(i_z_ss, i_br_ss, \
-                dm, self.br_m_halo[i_z_ss][i_br_ss][0])
-
-        # This is to print information when testing the code
-        #if not self.print_off:
-        #    print (' ')
-        #    print ('Branch index :',i_z_ss, i_br_ss)
-        #    print ('   Branch first ID :', self.br_halo_ID[i_z_ss][i_br_ss][0])
-        #    print ('   Branch last ID :',self.br_ID_merge[i_z_ss][i_br_ss])
-        #    print ('   M_DM_f :', self.br_m_halo[i_z_ss][i_br_ss][-1], 'Msun')
-
-        # Create a galaxy instance with external_control = True
-        self.__create_galaxy(i_z_ss, i_br_ss)
-
-
-    ##############################################
-    #            Correct Initial State           #
-    ##############################################
-    def __correct_initial_state(self, i_z_ss, i_br_ss, dm_comb, dm_ini):
-
-        '''
-        Add primordial gas if their is more dark matter than
-        the sum of all pregenitors' dark matter mass. Gas is
-        removed if less dark matter.
-
-        Arguments
-        =========
-
-          i_z_ss: Redshift index
-          i_br_ss: Branch index
-          dm_comb : Combined dark matter mass
-          dm_ini  : Initial dark matter mass according to the merger tree
-
-        '''
-
-        # Calculate the extra dark matter added (or removed if negative)
-        dm_added = dm_ini - dm_comb
-
-        # If we need to add primordial gas ..
-        if dm_added > 0.0:
-
-            # Calculate the baryonic mass added
-            dm_bar_added = dm_added * self.o_ini.omega_b_0 / self.o_ini.omega_0
-            self.dm_bar_added_iso[i_z_ss][i_br_ss] = self.prim_x_frac * dm_bar_added
-
-            # Add or remove the mass to the halo
-            self.ymgal_outer_ini += self.dm_bar_added_iso[i_z_ss][i_br_ss]
-
-        # If we need to remove gas ..
-        else:
-
-            # Calculate the fraction of halo mass that needs to stay
-            f_keep_temp = dm_ini / dm_comb
-
-            # Make sure not to remove more than available
-            if f_keep_temp < 0.0:
-                if np.sum(self.ymgal_outer_ini) < abs(dm_added):
-                    print ('OH GOD', f_keep_temp)
-                    f_keep_temp = 0.0
-
-            # Correct the gas halo mass
-            self.ymgal_outer_ini *= f_keep_temp
+                    # Increase i_br_ss
+                    i_br_ss += use_proc
 
 
     ##############################################
@@ -598,6 +516,177 @@ class gamma():
         # Return the indexes
         return i_z_par, i_br_par
 
+class Omega_Branch():
+    '''
+    This class handles the creation of a branch for the merger tree
+
+        Arguments
+        =========
+
+          i_z_ss: Redshift index
+          i_br_ss: Branch index
+          dm: Combined dark matter mass of the progenitors
+          mdot_ini: Future stellar ejecta of the merged stellar populations
+          mdot_ini_t: Times associated with the future ejecta
+          ism_ini: Mass and composition of the merged inner gas reservoir
+          ymgal_outer_ini: Mass and composition of the merged outer gas reservoir
+          dmo_ini: Future outflow ejecta of the merged SNe (feedback)
+          dmo_ini_t: Times associated with the future outflow ejecta
+
+        '''
+
+    def __init__(self, args):
+        '''
+        This initialization class will simply create a copy of gammas' arguments
+
+        '''
+
+        # Copy all gamma values
+        self.__dict__ = copy.copy(args[0].__dict__)
+        self.arguments = args[1:]
+
+    ##############################################
+    #                  Get galaxy                #
+    ##############################################
+    def get_galaxy(self):
+        '''
+        Wrapper class for create_branch, it allows to call
+        the class from outside without modifying it
+
+        '''
+
+        return self.__create_branch(*self.arguments)
+
+    ##############################################
+    #               Create Branch                 #
+    ##############################################
+    def __create_branch(self, i_z_ss, i_br_ss, dm=-1, mdot_ini=np.array([]), \
+                        mdot_ini_t=np.array([]), ism_ini=np.array([]), \
+                        ymgal_outer_ini=np.array([]), dmo_ini=np.array([]), \
+                        dmo_ini_t=np.array([])):
+
+        '''
+        Create OMEGA to represent a specific branch from a merger tree, until
+        the branch merges.
+
+        Arguments
+        =========
+
+          i_z_ss: Redshift index
+          i_br_ss: Branch index
+          dm: Combined dark matter mass of the progenitors
+          mdot_ini: Future stellar ejecta of the merged stellar populations
+          mdot_ini_t: Times associated with the future ejecta
+          ism_ini: Mass and composition of the merged inner gas reservoir
+          ymgal_outer_ini: Mass and composition of the merged outer gas reservoir
+          dmo_ini: Future outflow ejecta of the merged SNe (feedback)
+          dmo_ini_t: Times associated with the future outflow ejecta
+
+        '''
+
+        # Assign the combined SSP, ISM gas, outflow (needs to be in create_omega)
+        self.mdot_ini = mdot_ini
+        self.mdot_ini_t = mdot_ini_t
+        self.ism_ini = ism_ini
+        self.ymgal_outer_ini = ymgal_outer_ini
+        self.dmo_ini = dmo_ini
+        self.dmo_ini_t = dmo_ini_t
+
+        # Calculate the duration of the OMEGA instance
+        self.tend = self.times[-1] - self.times[i_z_ss] + \
+                   (self.times[-1] - self.times[-2]) # Extra step for the trunk
+
+        # Assign the DM array
+        self.DM_array = []
+        for i_cb in range(0,len(self.br_age[i_z_ss][i_br_ss])):
+            self.DM_array.append([0.0]*2)
+            self.DM_array[i_cb][0] = self.br_age[i_z_ss][i_br_ss][i_cb]
+            self.DM_array[i_cb][1] = self.br_m_halo[i_z_ss][i_br_ss][i_cb]
+        self.DM_array = np.array(self.DM_array)
+
+        # Assign the R_vir array
+        self.r_vir_array = []
+        for i_cb in range(0,len(self.br_age[i_z_ss][i_br_ss])):
+            self.r_vir_array.append([0.0]*2)
+            self.r_vir_array[i_cb][0] = self.br_age[i_z_ss][i_br_ss][i_cb]
+            self.r_vir_array[i_cb][1] = self.br_r_vir[i_z_ss][i_br_ss][i_cb]
+        self.r_vir_array = np.array(self.r_vir_array)
+
+        # Assign whether or not the branch will be a sub-halo at some point
+        self.is_sub_array = np.array([])
+        if self.is_sub_info:
+            for i_cb in range(0,len(self.br_is_sub[i_z_ss][i_br_ss])):
+                self.is_sub_array.append([0.0]*2)
+                self.is_sub_array[i_cb][0] = self.br_age[i_z_ss][i_br_ss][i_cb]
+                self.is_sub_array[i_cb][1] = self.br_is_sub[i_z_ss][i_br_ss][i_cb]
+
+        # Add mass depending on the dark matter mass ratio.
+        # This is because the sum of dark matter masses from the progenitors
+        # sometime does not equal the initial dark matter mass of the new branch..
+        if dm > 0.0:
+            self.__correct_initial_state(i_z_ss, i_br_ss, \
+                dm, self.br_m_halo[i_z_ss][i_br_ss][0])
+
+        # This is to print information when testing the code
+        #if not self.print_off:
+            #print (' ')
+            #print ('Branch index :',i_z_ss, i_br_ss)
+            #print ('   Branch first ID :', self.br_halo_ID[i_z_ss][i_br_ss][0])
+            #print ('   Branch last ID :',self.br_ID_merge[i_z_ss][i_br_ss])
+            #print ('   M_DM_f :', self.br_m_halo[i_z_ss][i_br_ss][-1], 'Msun')
+
+        # Create a galaxy instance with external_control = True
+        return self.__create_galaxy(i_z_ss, i_br_ss)
+
+
+    ##############################################
+    #            Correct Initial State           #
+    ##############################################
+    def __correct_initial_state(self, i_z_ss, i_br_ss, dm_comb, dm_ini):
+
+        '''
+        Add primordial gas if their is more dark matter than
+        the sum of all pregenitors' dark matter mass. Gas is
+        removed if less dark matter.
+
+        Arguments
+        =========
+
+          i_z_ss: Redshift index
+          i_br_ss: Branch index
+          dm_comb : Combined dark matter mass
+          dm_ini  : Initial dark matter mass according to the merger tree
+
+        '''
+
+        # Calculate the extra dark matter added (or removed if negative)
+        dm_added = dm_ini - dm_comb
+
+        # If we need to add primordial gas ..
+        if dm_added > 0.0:
+
+            # Calculate the baryonic mass added
+            dm_bar_added = dm_added * self.o_ini.omega_b_0 / self.o_ini.omega_0
+            self.dm_bar_added_iso[i_z_ss][i_br_ss] = self.prim_x_frac * dm_bar_added
+
+            # Add or remove the mass to the halo
+            self.ymgal_outer_ini += self.dm_bar_added_iso[i_z_ss][i_br_ss]
+
+        # If we need to remove gas ..
+        else:
+
+            # Calculate the fraction of halo mass that needs to stay
+            f_keep_temp = dm_ini / dm_comb
+
+            # Make sure not to remove more than available
+            if f_keep_temp < 0.0:
+                if np.sum(self.ymgal_outer_ini) < abs(dm_added):
+                    print ('OH GOD', f_keep_temp)
+                    f_keep_temp = 0.0
+
+            # Correct the gas halo mass
+            self.ymgal_outer_ini *= f_keep_temp
+
 
     ##############################################
     #               Create Galaxy                #
@@ -657,7 +746,7 @@ class gamma():
             br_sfh_temp = np.array([])
 
         # Create an OMEGA or OMEGA_SAM instance
-        self.galaxy_inst[i_z_ss][i_br_ss] = omega_plus.omega_plus(Z_trans=self.Z_trans, \
+        return (i_br_ss, omega_plus.omega_plus(Z_trans=self.Z_trans, \
             f_dyn=self.f_dyn, sfe=self.sfe, mass_loading=self.mass_loading, \
             t_star=self.t_star, m_DM_0=self.m_DM_0, z_dependent=self.z_dependent,\
             exp_ml=self.exp_ml, imf_type=self.imf_type, alphaimf=self.alphaimf,\
@@ -722,13 +811,4 @@ class gamma():
             nb_inter_M_points=self.o_ini.nb_inter_M_points,\
             inter_M_points=self.o_ini.inter_M_points,\
             substeps=self.substeps,tolerance=self.tolerance,\
-            min_val=self.min_val,y_coef_Z_aM_ej=self.o_ini.y_coef_Z_aM_ej)
-
-    ##############################################
-    #                  Get Time                  #
-    ##############################################
-    def __get_time(self):
-
-        out = 'Run time: ' + \
-        str(round((t_module.time() - self.start_time),2))+"s"
-        return out
+            min_val=self.min_val,y_coef_Z_aM_ej=self.o_ini.y_coef_Z_aM_ej))

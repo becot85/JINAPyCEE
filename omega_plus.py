@@ -820,7 +820,7 @@ class omega_plus():
                 targ = elem[0]; prod = elem[1]; rate = 1 / elem[2]
 
                 # Add reaction
-                reaction = self._Reaction(targ, prod, rate)
+                reaction = Reaction(targ, prod, rate)
 
                 if targ in self.reac_dictionary:
                     self.reac_dictionary[targ].append(reaction)
@@ -863,6 +863,12 @@ class omega_plus():
 
         # Now for each reaction, add to the decay arrays
         for target in self.reac_dictionary:
+
+            # TODO
+            for reaction in self.reac_dictionary[target]:
+                print(target, reaction)
+            # TODO
+
             # Get target index
             targ_index = cpy_radio_iso.index(target)
 
@@ -1006,10 +1012,10 @@ class omega_plus():
                         reac_list = []
                         # If in a fission, just add every product as a new reaction
                         for kk in range(len(fiss_prods)):
-                            reac_list.append(self._Reaction(targ,\
+                            reac_list.append(Reaction(targ,\
                                     [fiss_prods[kk]], rate_jj*fiss_rates[kk]))
                     else:
-                        reac_list = [self._Reaction(targ, prod_list, rate_jj)]
+                        reac_list = [Reaction(targ, prod_list, rate_jj)]
 
                     if targ in self.reac_dictionary:
                         self.reac_dictionary[targ] += reac_list
@@ -1082,7 +1088,7 @@ class omega_plus():
                         for reac2 in skipped_elements[elem]:
                             prod = reac2[0] + keep_prods
                             this_rate = reac2[1] * rate
-                            reaction = self._Reaction(targ, prod, this_rate)
+                            reaction = Reaction(targ, prod, this_rate)
                             self.reac_dictionary[targ].append(reaction)
 
     ##############################################
@@ -2201,44 +2207,44 @@ class omega_plus():
         return out
 
 
-    ##############################################
-    #               Reaction CLASS               #
-    ##############################################
-    class _Reaction():
+##############################################
+#               Reaction CLASS               #
+##############################################
+class Reaction():
+
+    '''
+    Class for reactions
+
+    '''
+
+    #############################
+    #        Constructor        #
+    #############################
+    def __init__(self, target, products, rate):
 
         '''
-        Class for reactions
+        Initialize the reaction. It takes a target, a single
+        product or a list of products and a rate.
 
         '''
 
-        #############################
-        #        Constructor        #
-        #############################
-        def __init__(self, target, products, rate):
-
-            '''
-            Initialize the reaction. It takes a target, a single
-            product or a list of products and a rate.
-
-            '''
-
-            self.target = target
-            self.products = products if type(products) is list else [products]
-            self.rate = rate
+        self.target = target
+        self.products = products if type(products) is list else [products]
+        self.rate = rate
 
 
-        #############################
-        #      __str__ method       #
-        #############################
-        def __str__(self):
+    #############################
+    #      __str__ method       #
+    #############################
+    def __str__(self):
 
-            '''
-            __str__ method for the class, for when using "print"
+        '''
+        __str__ method for the class, for when using "print"
 
-            '''
-            s = "{} -> {}".format(self.target, self.products[0])
-            for prod in self.products[1:]:
-                s += " + {}".format(prod)
-            s += "; rate = {} 1/y".format(self.rate)
+        '''
+        s = "{} -> {}".format(self.target, self.products[0])
+        for prod in self.products[1:]:
+            s += " + {}".format(prod)
+        s += "; rate = {} 1/y".format(self.rate)
 
-            return s
+        return s
