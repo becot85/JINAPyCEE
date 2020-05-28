@@ -864,11 +864,6 @@ class omega_plus():
         # Now for each reaction, add to the decay arrays
         for target in self.reac_dictionary:
 
-            # TODO
-            for reaction in self.reac_dictionary[target]:
-                print(target, reaction)
-            # TODO
-
             # Get target index
             targ_index = cpy_radio_iso.index(target)
 
