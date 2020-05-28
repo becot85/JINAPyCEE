@@ -231,7 +231,7 @@ class omega_plus():
             nb_inter_M_points_pop3=nb_inter_M_points_pop3,\
             inter_M_points_pop3_tree=inter_M_points_pop3_tree,\
             nb_inter_M_points=nb_inter_M_points, inter_M_points=inter_M_points,\
-            y_coef_Z_aM_ej=y_coef_Z_aM_ej)
+            y_coef_Z_aM_ej=y_coef_Z_aM_ej, in_parallel = in_parallel)
 
         # Parameters associated with OMEGA+
         self.m_outer_ini = m_outer_ini
@@ -276,6 +276,25 @@ class omega_plus():
         self.min_val = min_val
         self.in_parallel = in_parallel
 
+        if not self.in_parallel:
+            self.start_simulation()
+
+        # Announce the end of the simulation
+        if not print_off:
+            print ('   OMEGA+ run completed -',self.__get_time())
+
+    ##############################################
+    #       Wrapper for starting simulation      #
+    ##############################################
+    def start_simulation(self):
+        '''
+        A wrapper for the initialization method so it works in parallel calls
+
+        '''
+
+        # Run omega simulation
+        self.inner.run_simulation()
+
         # Get inflow rate if input array, and calculate the interpolation coefficients
         if self.len_m_inflow_in > 0:
             self.m_inflow_in_rate = np.zeros(self.inner.nb_timesteps)
@@ -302,11 +321,11 @@ class omega_plus():
             self.is_sub = [False]*(self.inner.nb_timesteps+1)
 
         # If the dark matter mass is constant ..
-        if len(DM_array) == 0:
+        if len(self.inner.DM_array) == 0:
 
             # Assign a constant mass to all timesteps
             for i_step_OMEGA in range(0,self.inner.nb_timesteps+1):
-                self.inner.m_DM_t[i_step_OMEGA] = m_DM_0
+                self.inner.m_DM_t[i_step_OMEGA] = self.inner.m_DM_0
 
         # If the dark matter mass evolves ..
         else:
@@ -395,18 +414,6 @@ class omega_plus():
             self.inner.redshift_t[-1])**((-1.5)*self.t_ff_index) / \
                 self.inner.H_0 * 9.7759839e11)
 
-        # Run the simulation
-        if not self.in_parallel:
-            self.__start_simulation()
-
-        # Announce the end of the simulation
-        if not print_off:
-            print ('   OMEGA+ run completed -',self.__get_time())
-
-    ##############################################
-    #       Wrapper for starting simulation      #
-    ##############################################
-    def start_simulation(self):
         self.__start_simulation()
 
     ##############################################
