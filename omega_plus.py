@@ -133,7 +133,8 @@ class omega_plus():
                  inter_lifetime_points=np.array([]),inter_lifetime_points_tree=np.array([]),\
                  nb_inter_lifetime_points=np.array([]), nb_inter_M_points_pop3=np.array([]),\
                  inter_M_points_pop3_tree=np.array([]), nb_inter_M_points=np.array([]),\
-                 inter_M_points=np.array([]), y_coef_Z_aM_ej=np.array([])):
+                 inter_M_points=np.array([]), y_coef_Z_aM_ej=np.array([]),\
+                 in_parallel = False):
 
         # Not implemented yet
         if len(sne_L_feedback) > 0:
@@ -273,6 +274,7 @@ class omega_plus():
         self.substeps = substeps
         self.tolerance = tolerance
         self.min_val = min_val
+        self.in_parallel = in_parallel
 
         # Get inflow rate if input array, and calculate the interpolation coefficients
         if self.len_m_inflow_in > 0:
@@ -394,12 +396,18 @@ class omega_plus():
                 self.inner.H_0 * 9.7759839e11)
 
         # Run the simulation
-        self.__start_simulation()
+        if not self.in_parallel:
+            self.__start_simulation()
 
         # Announce the end of the simulation
         if not print_off:
             print ('   OMEGA+ run completed -',self.__get_time())
 
+    ##############################################
+    #       Wrapper for starting simulation      #
+    ##############################################
+    def start_simulation(self):
+        self.__start_simulation()
 
     ##############################################
     #                  Get SFE                   #
