@@ -90,7 +90,7 @@ class omega_plus():
                  gal_out_index=1.0, f_halo_to_gal_out=-1, beta_crit=1.0, \
                  DM_outflow_C17=False, m_cold_flow_tresh=-1, C17_eta_z_dep=True, \
                  Grackle_on=False, f_t_ff=1.0, t_inflow=-1.0, t_ff_index=1.0, \
-                 use_decay_module=False, max_half_life=1e14, min_half_life=1000,\
+                 max_half_life=1e14, min_half_life=1000,\
                  substeps = [2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64, 96, 128, 192, 256, 384],\
                  tolerance = 1e-5, min_val = 1e-20, print_param=False,\
                  delayed_extra_log=False, delayed_extra_yields_log_int=False, \
@@ -202,7 +202,6 @@ class omega_plus():
             mass_sampled=mass_sampled, scale_cor=scale_cor, m_DM_0=m_DM_0,\
             poly_fit_dtd_5th=poly_fit_dtd_5th, poly_fit_range=poly_fit_range,\
             pre_calculate_SSPs=pre_calculate_SSPs, dt_in_SSPs=dt_in_SSPs, SSPs_in=SSPs_in,\
-            use_decay_module=use_decay_module, \
             delayed_extra_dtd=delayed_extra_dtd, delayed_extra_dtd_norm=delayed_extra_dtd_norm, \
             delayed_extra_yields=delayed_extra_yields, \
             delayed_extra_yields_norm=delayed_extra_yields_norm, \
