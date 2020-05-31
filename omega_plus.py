@@ -292,8 +292,9 @@ class omega_plus():
 
         '''
 
-        # Run omega simulation
-        self.inner.run_simulation()
+        # Run omega simulation if in parallel
+        if self.in_parallel:
+            self.inner.run_simulation()
 
         # Get inflow rate if input array, and calculate the interpolation coefficients
         if self.len_m_inflow_in > 0:
