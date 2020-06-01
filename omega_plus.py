@@ -133,8 +133,7 @@ class omega_plus():
                  inter_lifetime_points=np.array([]),inter_lifetime_points_tree=np.array([]),\
                  nb_inter_lifetime_points=np.array([]), nb_inter_M_points_pop3=np.array([]),\
                  inter_M_points_pop3_tree=np.array([]), nb_inter_M_points=np.array([]),\
-                 inter_M_points=np.array([]), y_coef_Z_aM_ej=np.array([]),\
-                 in_parallel = False):
+                 inter_M_points=np.array([]), y_coef_Z_aM_ej=np.array([])):
 
         # Not implemented yet
         if len(sne_L_feedback) > 0:
@@ -231,7 +230,7 @@ class omega_plus():
             nb_inter_M_points_pop3=nb_inter_M_points_pop3,\
             inter_M_points_pop3_tree=inter_M_points_pop3_tree,\
             nb_inter_M_points=nb_inter_M_points, inter_M_points=inter_M_points,\
-            y_coef_Z_aM_ej=y_coef_Z_aM_ej, in_parallel = in_parallel)
+            y_coef_Z_aM_ej=y_coef_Z_aM_ej)
 
         # Parameters associated with OMEGA+
         self.m_outer_ini = m_outer_ini
@@ -274,27 +273,6 @@ class omega_plus():
         self.substeps = substeps
         self.tolerance = tolerance
         self.min_val = min_val
-        self.in_parallel = in_parallel
-
-        if not self.in_parallel:
-            self.start_simulation()
-
-        # Announce the end of the simulation
-        if not print_off:
-            print ('   OMEGA+ run completed -',self.__get_time())
-
-    ##############################################
-    #       Wrapper for starting simulation      #
-    ##############################################
-    def start_simulation(self):
-        '''
-        A wrapper for the initialization method so it works in parallel calls
-
-        '''
-
-        # Run omega simulation if in parallel
-        if self.in_parallel:
-            self.inner.run_simulation()
 
         # Get inflow rate if input array, and calculate the interpolation coefficients
         if self.len_m_inflow_in > 0:
@@ -416,6 +394,10 @@ class omega_plus():
                 self.inner.H_0 * 9.7759839e11)
 
         self.__start_simulation()
+
+        # Announce the end of the simulation
+        if not print_off:
+            print ('   OMEGA+ run completed -',self.__get_time())
 
     ##############################################
     #                  Get SFE                   #
@@ -821,6 +803,10 @@ class omega_plus():
             # At this point we need to choose which isotopes to follow
             # We also store the reactions
             self.__choose_network(cpy_radio_iso, hist_isotopes)
+
+            # We do not need to use the decay_module anymore, so let's
+            # delete it for pickling and multiprocessing purposes
+            del(self.inner.decay_module)
 
         elif self.inner.len_decay_file > 0:
 

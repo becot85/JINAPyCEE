@@ -367,7 +367,7 @@ class gamma():
                     # Define and run the processes
                     for ii in range(use_proc):
                         process = mp.Process(\
-                            target = lambda q, o: q.put(o.get_galaxy()), \
+                            target = lambda q, o: o.get_galaxy(q), \
                             args = (queue, branches[i_br_ss + ii]))
                         process.start()
 
@@ -548,17 +548,21 @@ class Omega_Branch():
     ##############################################
     #                  Get galaxy                #
     ##############################################
-    def get_galaxy(self):
+    def get_galaxy(self, queue = None):
         '''
         Wrapper class for create_branch, it allows to call
         the class from outside without modifying it
 
         '''
 
-        return self.__create_branch(*self.arguments)
+        gal = self.__create_branch(*self.arguments)
+        if queue is not None:
+            queue.put(gal)
+        else:
+            return gal
 
     ##############################################
-    #               Create Branch                 #
+    #               Create Branch                #
     ##############################################
     def __create_branch(self, i_z_ss, i_br_ss, dm=-1, mdot_ini=np.array([]), \
                         mdot_ini_t=np.array([]), ism_ini=np.array([]), \
