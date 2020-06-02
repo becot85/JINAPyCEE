@@ -321,9 +321,9 @@ class omega_plus():
 
         # Calculate the primordial composition (mass fraction) for inflows ..
         iniabu_table = os.path.join("yield_tables", "iniabu", "iniab_bb_walker91.txt")
-        ytables_bb = ry.read_yield_sn1a_tables( \
-            os.path.join(nupy_path, iniabu_table), self.inner.history.isotopes)
-        self.prim_x_frac = ytables_bb.get(quantity='Yields')
+        ytables_bb = ry.read_yields_Z( \
+            os.path.join(nupy_path, iniabu_table), isotopes=self.inner.history.isotopes)
+        self.prim_x_frac = ytables_bb.get(Z=ytables_bb.Z_list[0], quantity='Yields')
         del ytables_bb
 
         # Calculate the baryonic fraction
