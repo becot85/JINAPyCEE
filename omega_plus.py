@@ -91,6 +91,7 @@ class omega_plus():
                  DM_outflow_C17=False, m_cold_flow_tresh=-1, C17_eta_z_dep=True, \
                  Grackle_on=False, f_t_ff=1.0, t_inflow=-1.0, t_ff_index=1.0, \
                  max_half_life=1e14, min_half_life=1000,\
+                 use_net_yields_stable=False,\
                  substeps = [2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64, 96, 128, 192, 256, 384],\
                  tolerance = 1e-5, min_val = 1e-20, print_param=False,\
                  delayed_extra_log=False, delayed_extra_yields_log_int=False, \
@@ -211,6 +212,7 @@ class omega_plus():
             ytables_nsmerger_radio_in=ytables_nsmerger_radio_in,\
             test_clayton=test_clayton, radio_refinement=radio_refinement,\
             nsm_dtd_power=nsm_dtd_power,\
+            use_net_yields_stable=use_net_yields_stable,\
             inter_Z_points=inter_Z_points,\
             nb_inter_Z_points=nb_inter_Z_points, y_coef_M=y_coef_M,\
             y_coef_M_ej=y_coef_M_ej, y_coef_Z_aM=y_coef_Z_aM,\
@@ -321,9 +323,9 @@ class omega_plus():
 
         # Calculate the primordial composition (mass fraction) for inflows ..
         iniabu_table = os.path.join("yield_tables", "iniabu", "iniab_bb_walker91.txt")
-        ytables_bb = ry.read_yield_sn1a_tables( \
-            os.path.join(nupy_path, iniabu_table), self.inner.history.isotopes)
-        self.prim_x_frac = ytables_bb.get(quantity='Yields')
+        ytables_bb = ry.read_yields_Z( \
+            os.path.join(nupy_path, iniabu_table), isotopes=self.inner.history.isotopes)
+        self.prim_x_frac = ytables_bb.get(quantity='Yields', Z=0.0)
         del ytables_bb
 
         # Calculate the baryonic fraction
@@ -1248,10 +1250,6 @@ class omega_plus():
 
             # Initialize
             final_sfr = 0.;  total_m_added = 0.;  total_m_lost = 0.
-            t_m_prim = []; t_m_gal = []; t_m_gal_radio = []
-            t_m_prim_out = []; t_m_cgm = []; t_m_cgm_radio = []
-            t_total_sfr = []; t_m_added = []; t_m_lost = []
-
             HH = totDt; newHH = HH
 
             while totDt > 0:
@@ -1259,7 +1257,9 @@ class omega_plus():
 
                 # Run the patankar algorithm for the substeps
                 err = []
-                t_extrapol = []
+                t_m_prim = []; t_m_gal = []; t_m_gal_radio = []
+                t_m_prim_out = []; t_m_cgm = []; t_m_cgm_radio = []
+                t_total_sfr = []; t_m_added = []; t_m_lost = []
 
                 for ii in range(len(self.substeps)):
                     nn = self.substeps[ii]
