@@ -1293,10 +1293,8 @@ class omega_plus():
                                 t_m_cgm, t_m_cgm_radio, t_total_sfr, t_m_added,\
                                 t_m_lost]
 
-                    #print("timestep OMEGA =",i_step_OMEGA)
                     if ii > 0:
                         for kk in range(len(t_m_gal) - 1):
-                            #print("   kk=",kk, len(t_m_gal), len(self.substeps), " ii=",ii, ii - kk - 1)
                             for tt in t_extrap:
                                 tt[-1].append(tt[-1][kk] + (tt[-1][kk] - tt[-2][kk])\
                                     / ((fnn/self.substeps[ii - kk - 1]) - 1))
@@ -1456,14 +1454,6 @@ class omega_plus():
         total_sfr = 0.;  m_added = 0.;  m_lost = 0.
 
         # Introduce the yields for all isotopes
-        # ====
-#        print("i_step",i_step_OMEGA)
-#        print("   mdot_massive -->",sum(self.inner.mdot_massive[i_step_OMEGA]))
-#        for mm in mdots:
-#            print("  ",min(mm[i_step_OMEGA]))
-#            if min(mm[i_step_OMEGA])<0:
-#                raise Exception("HELL") 
-        # ====
         yield_rate = np.array([x[i_step_OMEGA] / (htm * nn) for x in mdots])
         if self.inner.len_decay_file > 0 or self.inner.use_decay_module:
             yield_rate_radio = [x[i_step_OMEGA] / (htm * nn) for x in mdots_radio]
