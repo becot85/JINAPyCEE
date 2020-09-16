@@ -1373,7 +1373,7 @@ class omega_plus():
                         self.ymgal_outer_radio[i_step_OMEGA + 1] += mcgm_radio_init_split[ii]
 
             # Update original arrays
-            self.inner.history.sfr_abs[i_step_OMEGA] = final_sfr /\
+            self.inner.sfr_abs[i_step_OMEGA] = final_sfr /\
                     self.inner.history.timesteps[i_step_OMEGA]
             self.inner.m_outflow_t[i_step_OMEGA] = total_m_lost
             self.inner.m_locked = final_sfr
@@ -1389,7 +1389,7 @@ class omega_plus():
                 self.inner.run_step(i_step_last + 1, 0.0, no_in_out=True)
 
                 # Update original arrays
-                self.inner.history.sfr_abs[i_step_OMEGA] = 0.0
+                self.inner.sfr_abs[i_step_OMEGA] = 0.0
                 self.inner.m_outflow_t[i_step_OMEGA] = 0.0
                 self.inner.m_locked = 0.0
 
@@ -1408,19 +1408,19 @@ class omega_plus():
 
         # If external control ...
         if self.inner.external_control:
-            self.inner.history.sfr_abs[i_step_OMEGA] = self.inner.history.sfr_abs[i_step_OMEGA-1]
+            self.inner.sfr_abs[i_step_OMEGA] = self.inner.sfr_abs[i_step_OMEGA-1]
 
         # Calculate the total mass of gas
         self.inner.m_stel_tot = 0.0
         for i_tot in range(0,len(self.inner.history.timesteps)):
-            self.inner.m_stel_tot += self.inner.history.sfr_abs[i_tot] * \
+            self.inner.m_stel_tot += self.inner.sfr_abs[i_tot] * \
                 self.inner.history.timesteps[i_tot]
         if self.inner.m_stel_tot > 0.0:
             self.inner.m_stel_tot = 1.0 / self.inner.m_stel_tot
         self.inner.f_m_stel_tot = []
         m_temp = 0.0
         for i_tot in range(0,len(self.inner.history.timesteps)):
-            m_temp += self.inner.history.sfr_abs[i_tot] * \
+            m_temp += self.inner.sfr_abs[i_tot] * \
                 self.inner.history.timesteps[i_tot]
             self.inner.f_m_stel_tot.append(m_temp*self.inner.m_stel_tot)
         self.inner.f_m_stel_tot.append(self.inner.f_m_stel_tot[-1])
