@@ -133,8 +133,10 @@ class omega_plus():
                  nb_inter_lifetime_points_pop3=np.array([]),\
                  inter_lifetime_points=np.array([]),inter_lifetime_points_tree=np.array([]),\
                  nb_inter_lifetime_points=np.array([]), nb_inter_M_points_pop3=np.array([]),\
-                 inter_M_points_pop3_tree=np.array([]), nb_inter_M_points=np.array([]),\
-                 inter_M_points=np.array([]), y_coef_Z_aM_ej=np.array([])):
+                 inter_M_points_pop3=np.array([]), inter_M_points_pop3_tree=None,\
+                 nb_inter_M_points=np.array([]),\
+                 inter_M_points=np.array([]),\
+                 inter_M_points_tree=None, y_coef_Z_aM_ej=np.array([])):
 
         # Not implemented yet
         if len(sne_L_feedback) > 0:
@@ -229,8 +231,10 @@ class omega_plus():
             inter_lifetime_points_tree=inter_lifetime_points_tree,\
             nb_inter_lifetime_points=nb_inter_lifetime_points,\
             nb_inter_M_points_pop3=nb_inter_M_points_pop3,\
+            inter_M_points_pop3=inter_M_points_pop3,\
             inter_M_points_pop3_tree=inter_M_points_pop3_tree,\
             nb_inter_M_points=nb_inter_M_points, inter_M_points=inter_M_points,\
+            inter_M_points_tree=inter_M_points_tree,\
             y_coef_Z_aM_ej=y_coef_Z_aM_ej)
 
         # Parameters associated with OMEGA+
