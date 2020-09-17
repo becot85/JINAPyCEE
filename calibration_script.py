@@ -182,7 +182,7 @@ def run_calibration(kwargs, kwargs_yields, weights, values, param_vals,\
                 # with respect to the ii-th parameter (a1, b1, range2, sfe...)
                 derivs = []
                 for key2 in values:
-                    der = 2*rel_error[key2]/solutions[key2]
+                    der = 2*rel_error[key2]*weights[key2]/solutions[key2]
                     der *= (new_values[key2] - values[key2])/deltas_deriv[key]
                     derivs.append(der)
 
@@ -249,7 +249,7 @@ def run_calibration(kwargs, kwargs_yields, weights, values, param_vals,\
 # Parameters for the machine-learning
 threshold = 3e-2 # Maximum relative error
 learning_factor = 2e0 # Controls the maximum parameter step (does not need to be < 1)
-max_iter = 10 # Maximum iterations before the program exits
+max_iter = 100 # Maximum iterations before the program exits
 
 # Define omega arguments
 table = 'yield_tables/AK_stable.txt'
@@ -266,14 +266,14 @@ kwargs["m_DM_0"] = 1.0e12
 kwargs["sn1a_rate"] = 'power_law'
 kwargs["print_off"] = True
 
-kwargs["special_timesteps"] = 50
+kwargs["special_timesteps"] = 150
 #kwargs["dt"] = 5e8
 
 # Weight dictionary
 weights = {}
 weights["sfr"] = 1
 weights["inflow_rate"] = 0.1
-weights["m_gas"] = 1
+weights["m_gas"] = 2
 weights["cc_sne_rate"] = 1
 weights["Ia_sne_rate"] = 1
 weights["metallicity"] = 5
