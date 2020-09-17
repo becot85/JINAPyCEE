@@ -400,6 +400,34 @@ class omega_plus():
         if not print_off:
             print ('   OMEGA+ run completed -',self.__get_time())
 
+
+
+    ##############################################
+    #            Remove Last Timestep            #
+    ##############################################
+    def remove_last_timestep(self):
+
+        '''
+        This function remove the last timestep that was created to 
+        make sure rates are provided for the last step. For example,
+        if the user asks for 30 timesteps, there will be 31 time
+        entries in the output, but we need to add temporarily a
+        32nd steps so that rates can be calculated for step 31.
+
+        '''
+
+        # Go through the arrays of omega.py
+        self.inner.remove_last_timestep()
+
+        # Remove last entry from a subset of OMEGA arrays
+        self.T_vir_t = self.T_vir_t[:-1]
+        self.rho_500_t = self.rho_500_t[:-1]
+        if self.len_m_inflow_in > 0:
+            self.m_inflow_in_rate = self.m_inflow_in_rate[:-1]
+            self.m_inflow_in_rate_coef = self.m_inflow_in_rate_coef[:-1]
+
+
+
     ##############################################
     #                  Get SFE                   #
     ##############################################
@@ -1406,10 +1434,6 @@ class omega_plus():
         self.inner.history.m_tot_ISM_t = self.inner.m_tot_ISM_t
         self.inner.history.eta_outflow_t = self.inner.eta_outflow_t
 
-        # If external control ...
-        if self.inner.external_control:
-            self.inner.sfr_abs[i_step_OMEGA] = self.inner.sfr_abs[i_step_OMEGA-1]
-
         # Calculate the total mass of gas
         self.inner.m_stel_tot = 0.0
         for i_tot in range(0,len(self.inner.history.timesteps)):
@@ -1424,6 +1448,9 @@ class omega_plus():
                 self.inner.history.timesteps[i_tot]
             self.inner.f_m_stel_tot.append(m_temp*self.inner.m_stel_tot)
         self.inner.f_m_stel_tot.append(self.inner.f_m_stel_tot[-1])
+
+        # Remove extra timestep (used to calculate rates at t = self.tend)
+        self.remove_last_timestep()
 
         # Announce the end of the simulation
         print ('   OMEGA run completed -',self.inner._gettime())
