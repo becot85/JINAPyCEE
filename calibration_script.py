@@ -31,14 +31,14 @@ def run_omega(kwargs, param_vals, param_norms):
     # Recover parameters
     a1 = param_vals["a1"]*param_norms["a1"]
     b1 = param_vals["b1"]*param_norms["b1"]
-    range2 = param_vals["range2"]*param_norms["range2"]
+    imf_yield_top = param_vals["imf_yield_top"]*param_norms["imf_yield_top"]
     sfe = param_vals["sfe"]*param_norms["sfe"]
     mass_loading = param_vals["mass_loading"]*param_norms["mass_loading"]
 
     # Define the inflow rates
     # [norm, t_max, timescale]
     exp_infall = [[a1, 0.0, 0.68e9], [b1, 1.0e9, 7.0e9]] # this is good
-    kwargs["imf_yields_range"] = [1, range2]
+    kwargs["imf_yields_range"] = [1, imf_yield_top]
     kwargs["sfe"] = sfe
     kwargs["mass_loading"] = mass_loading
     kwargs["exp_infall"] = exp_infall
@@ -55,12 +55,17 @@ def run_omega(kwargs, param_vals, param_norms):
     metallicity = get_value(op.inner.history.metallicity, op.inner.history.age,
                             time = 8.4e9)
 
+    time_arr, feh_arr = op.inner.plot_spectro(solar_norm='Asplund_et_al_2009', return_x_y=True)
+    FeH = get_value(feh_arr, time_arr, time = 8.4e9)
+
+    # Store values and return
     values = {}
     values["sfr"] = sfr
     values["inflow_rate"] = inflow_rate
     values["m_gas"] = m_gas
     values["cc_sne_rate"] = cc_sne_rate
     values["Ia_sne_rate"] = Ia_sne_rate
+    values["FeH"] = FeH
     values["metallicity"] = metallicity
 
     return op, values
@@ -109,8 +114,8 @@ def copy_yields(kwargs, op):
     return kwargs_yields
 
 def run_calibration(kwargs, kwargs_yields, weights, values, param_vals,\
-        param_norms, sol_ranges, threshold = 3e-2, learning_factor = 8e-1,\
-        max_iter = 10):
+        param_norms, sol_ranges, fix_params, threshold = 2e-2,\
+        learning_factor = 1e0, max_iter = 10):
     '''Calibrate omega using gradient descent'''
 
     # Get the target solutions and deltas_deriv
@@ -128,7 +133,7 @@ def run_calibration(kwargs, kwargs_yields, weights, values, param_vals,\
     ii = 0
     while True:
         try:
-            # Current solution
+            # Print current solution
             print("----------")
             print("Current solution")
             for key, val in values.items():
@@ -145,7 +150,14 @@ def run_calibration(kwargs, kwargs_yields, weights, values, param_vals,\
             sum_err = 0; sum_weights = 0
             for key in values:
                 rel_error[key] = (values[key] - solutions[key])
-                rel_error[key] *= weights[key]/solutions[key]
+
+                # Because the solution of FeH is 0, we do not divide by it.
+                if key == "FeH":
+                    sol = 1
+                else:
+                    sol = solutions[key]
+
+                rel_error[key] *= weights[key]/sol
 
                 sum_err += rel_error[key]**2
                 sum_weights += weights[key]
@@ -160,6 +172,9 @@ def run_calibration(kwargs, kwargs_yields, weights, values, param_vals,\
             print("Current error = {}; threshold = {}".format(error, threshold))
             print()
             if error < threshold:
+                print("----------")
+                print()
+                print("Error threshold achieved")
                 break
 
             # If it is not good enough, calculate the derivatives
@@ -170,7 +185,7 @@ def run_calibration(kwargs, kwargs_yields, weights, values, param_vals,\
                 # Change only one parameter
                 param_cpy = copy.copy(param_vals)
                 param_cpy[key] += deltas_deriv[key]
-                if key == "range2":
+                if key == "imf_yield_top":
                     op, new_values = run_omega(kwargs, param_cpy,\
                                                param_norms)
                 else:
@@ -179,10 +194,21 @@ def run_calibration(kwargs, kwargs_yields, weights, values, param_vals,\
 
                 # Calculate derivative
                 # This array holds the derivative of all the values (sfr, inflow...)
-                # with respect to the ii-th parameter (a1, b1, range2, sfe...)
+                # with respect to the ii-th parameter (a1, b1, imf_yield_top, sfe...)
                 derivs = []
                 for key2 in values:
-                    der = 2*rel_error[key2]*weights[key2]/solutions[key2]
+                    # If this parameter is fixed, do not change it
+                    if fix_params[key]:
+                        derivs = [0]
+                        break
+
+                    # Because the solution of FeH is 0, we do not divide by it.
+                    if key2 == "FeH":
+                        sol = 1
+                    else:
+                        sol = solutions[key2]
+
+                    der = 2*rel_error[key2]*weights[key2]/sol
                     der *= (new_values[key2] - values[key2])/deltas_deriv[key]
                     derivs.append(der)
 
@@ -224,6 +250,9 @@ def run_calibration(kwargs, kwargs_yields, weights, values, param_vals,\
 
             ii += 1
             if (ii > max_iter):
+                print("----------")
+                print()
+                print("Maximum of iterations reached")
                 break
 
         except KeyboardInterrupt:
@@ -231,7 +260,7 @@ def run_calibration(kwargs, kwargs_yields, weights, values, param_vals,\
         except:
             raise
 
-    # Best solution
+    # Print best solution
     print()
     print("----------")
     print("Best solution with error: {:.4f}".format(smallest_error))
@@ -247,9 +276,9 @@ def run_calibration(kwargs, kwargs_yields, weights, values, param_vals,\
         print(key + ": {:.2e}".format(val))
 
 # Parameters for the machine-learning
-threshold = 3e-2 # Maximum relative error
-learning_factor = 2e0 # Controls the maximum parameter step (does not need to be < 1)
-max_iter = 100 # Maximum iterations before the program exits
+threshold = 1e-2 # Maximum relative error
+learning_factor = 1e0 # Controls the maximum parameter step (does not need to be < 1)
+max_iter = 200 # Maximum iterations before the program exits
 
 # Define omega arguments
 table = 'yield_tables/AK_stable.txt'
@@ -272,19 +301,21 @@ kwargs["special_timesteps"] = 150
 # Weight dictionary
 weights = {}
 weights["sfr"] = 1
-weights["inflow_rate"] = 0.1
-weights["m_gas"] = 2
+weights["inflow_rate"] = 0.5
+weights["m_gas"] = 1
 weights["cc_sne_rate"] = 1
 weights["Ia_sne_rate"] = 1
-weights["metallicity"] = 5
+weights["FeH"] = 0
+weights["metallicity"] = 10
 
 # Define ranges of solutions. The solution must fall inside these ranges
 sol_ranges = {}
 sol_ranges["sfr"] = [0.65, 3.00]
 sol_ranges["inflow_rate"] = [0.6, 1.6]
-sol_ranges["m_gas"] = [3.6e9, 12.6e9]
+sol_ranges["m_gas"] = [3.6e9, 1.26e10]
 sol_ranges["cc_sne_rate"] = [1e-2, 3e-2]
 sol_ranges["Ia_sne_rate"] = [2e-3, 6e-3]
+sol_ranges["FeH"] = [-0.001, 0.001]
 sol_ranges["metallicity"] = [0.0135, 0.0145]
 
 # Define ranges of parameters. These give an idea to the code on the scale
@@ -292,17 +323,25 @@ sol_ranges["metallicity"] = [0.0135, 0.0145]
 param_ranges = {}
 param_ranges["a1"] = [0, 150]
 param_ranges["b1"] = [0, 15]
-param_ranges["range2"] = [20, 50]
+param_ranges["imf_yield_top"] = [20, 50]
 param_ranges["sfe"] = [1e-10, 1e-9]
 param_ranges["mass_loading"] = [0, 2]
 
 # Initial values (guess for parameter values)
 param_vals = {}
-param_vals["a1"] = 46
-param_vals["b1"] = 5.4
-param_vals["range2"] = 50
-param_vals["sfe"] = 2.5e-10
-param_vals["mass_loading"] = 0.5
+param_vals["a1"] = 22.9
+param_vals["b1"] = 6.86
+param_vals["imf_yield_top"] = 47.8
+param_vals["sfe"] = 1.94e-10
+param_vals["mass_loading"] = 0.671
+
+# Whether to fix a parameter so it does not change
+fix_params = {}
+fix_params["a1"] = False
+fix_params["b1"] = False
+fix_params["imf_yield_top"] = False
+fix_params["sfe"] = False
+fix_params["mass_loading"] = False
 
 # -------------- Do not change anything below this line -------------------
 
@@ -321,5 +360,5 @@ kwargs_yields = copy_yields(kwargs, op)
 
 # Now calibrate:
 run_calibration(kwargs, kwargs_yields, weights, values, param_vals,\
-        param_norms, sol_ranges, threshold = threshold,\
+        param_norms, sol_ranges, fix_params, threshold = threshold,\
         learning_factor = learning_factor, max_iter = max_iter)
