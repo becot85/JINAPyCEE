@@ -136,7 +136,8 @@ class omega_plus():
                  inter_M_points_pop3=np.array([]), inter_M_points_pop3_tree=None,\
                  nb_inter_M_points=np.array([]),\
                  inter_M_points=np.array([]),\
-                 inter_M_points_tree=None, y_coef_Z_aM_ej=np.array([])):
+                 inter_M_points_tree=None, y_coef_Z_aM_ej=np.array([]),
+                 yield_modifier=([])):
 
         # Not implemented yet
         if len(sne_L_feedback) > 0:
@@ -235,7 +236,7 @@ class omega_plus():
             inter_M_points_pop3_tree=inter_M_points_pop3_tree,\
             nb_inter_M_points=nb_inter_M_points, inter_M_points=inter_M_points,\
             inter_M_points_tree=inter_M_points_tree,\
-            y_coef_Z_aM_ej=y_coef_Z_aM_ej)
+            y_coef_Z_aM_ej=y_coef_Z_aM_ej, yield_modifier=yield_modifier)
 
         # Parameters associated with OMEGA+
         self.m_outer_ini = m_outer_ini
