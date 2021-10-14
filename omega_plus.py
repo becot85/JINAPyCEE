@@ -1539,7 +1539,7 @@ class omega_plus():
             # Get production factors for ymgal_outer and ymgal_outer_radio
             pp_prim = isot_or_prim + isot_added_cgm
             pp_split = isot_or_split
-            pp_radio = isot_or_split_radio
+            pp_split_radio = isot_or_split_radio
 
             # Get destruction factors for ymgal_outer and ymgal_outer_radio
             dd_prim = (ir_iso_prim + isot_removed_cgm_prim + \
