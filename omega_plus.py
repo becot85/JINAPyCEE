@@ -74,6 +74,7 @@ class omega_plus():
                  nsmerger_table = 'yield_tables/r_process_arnould_2007.txt', \
                  sn1a_table='yield_tables/sn1a_t86.txt', radio_refinement=1, \
                  pop3_table='yield_tables/popIII_heger10.txt', \
+                 high_mass_extrapolation='copy',\
                  hardsetZ=-1, sn1a_on=True, t_nsm_coal=-1.0, nb_nsm_per_m=-1,\
                  ns_merger_on=False, f_binary=1.0, f_merger=0.0008, \
                  t_merger_max=1.0e10, m_ej_nsm = 2.5e-02, iniabu_table='', \
@@ -175,6 +176,7 @@ class omega_plus():
             tend=tend, mgal=the_mgal, transitionmass=transitionmass, table=table, \
             sn1a_on=sn1a_on, sn1a_table=sn1a_table, ns_merger_on=ns_merger_on, \
             table_radio=table_radio, decay_file=decay_file,\
+            high_mass_extrapolation=high_mass_extrapolation,\
             sn1a_table_radio=sn1a_table_radio, nb_nsm_per_m=nb_nsm_per_m,\
             nsmerger_table_radio=nsmerger_table_radio, ism_ini_radio=ism_ini_radio,\
             f_binary=f_binary, f_merger=f_merger, t_merger_max=t_merger_max, \
