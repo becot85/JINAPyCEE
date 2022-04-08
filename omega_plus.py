@@ -62,80 +62,19 @@ import NuPyCEE.omega as omega
 class omega_plus():
 
     # Initialisation function
-    def __init__(self, Z_trans=1e-20, f_dyn=0.1, sfe=0.01, \
-                 m_DM_0=1.0e12, mass_loading=1.0, t_star=-1, \
-                 z_dependent=True, exp_ml=2.0, imf_type='kroupa', \
-                 alphaimf=2.35, imf_bdys=[0.1,100], sn1a_rate='power_law', \
-                 iniZ=0.0, dt=1e6, special_timesteps=60, tend=13e9, \
-                 mgal=1.0, transitionmass=8, ini_alpha=True, \
-                 table='yield_tables/agb_and_massive_stars_nugrid_MESAonly_fryer12delay.txt', \
-                 table_radio='', decay_file='', sn1a_table_radio='',\
-                 nsmerger_table_radio='',\
-                 nsmerger_table = 'yield_tables/r_process_arnould_2007.txt', \
-                 sn1a_table='yield_tables/sn1a_t86.txt', radio_refinement=1, \
-                 pop3_table='yield_tables/popIII_heger10.txt', \
-                 high_mass_extrapolation='copy',\
-                 hardsetZ=-1, sn1a_on=True, t_nsm_coal=-1.0, nb_nsm_per_m=-1,\
-                 ns_merger_on=False, f_binary=1.0, f_merger=0.0008, \
-                 t_merger_max=1.0e10, m_ej_nsm = 2.5e-02, iniabu_table='', \
-                 imf_bdys_pop3=[0.1,100], imf_yields_range_pop3=[10,30], \
-                 beta_pow=-1.0, gauss_dtd=[1e9,6.6e8], exp_dtd=2e9, \
-                 nb_1a_per_m=1.0e-3, t_merge=-1.0, imf_yields_range=[1,30], \
-                 exclude_masses=[], skip_zero=False, eta_norm=-1, redshift_f=0.0, \
-                 print_off=False, long_range_ref=False, calc_SSP_ej=False, \
-                 input_yields=False, popIII_info_fast=True, t_sf_z_dep=1.0, m_crit_on=False, \
-                 norm_crit_m=8.0e+09, mass_frac_SSP=0.5, imf_rnd_sampling=False, \
-                 halo_in_out_on=True, pre_calculate_SSPs=False, m_outer_ini=-1.0, \
-                 epsilon_sne_halo=0.0, nb_ccsne_per_m=0.01, epsilon_sne_gal=-1, \
-                 sfe_m_index=1.0, halo_out_index=1.0, is_SF=True, sfe_m_dep=False, \
-                 gal_out_index=1.0, f_halo_to_gal_out=-1, beta_crit=1.0, \
+    def __init__(self, mgal=1.0, print_off=False, halo_in_out_on=True, \
+                 m_outer_ini=-1.0, epsilon_sne_halo=0.0, nb_ccsne_per_m=0.01, \
+                 epsilon_sne_gal=-1, sfe_m_index=1.0, halo_out_index=1.0, \
+                 is_SF=True, sfe_m_dep=False, gal_out_index=1.0, f_halo_to_gal_out=-1, \
                  DM_outflow_C17=False, m_cold_flow_tresh=-1, C17_eta_z_dep=True, \
                  Grackle_on=False, f_t_ff=1.0, t_inflow=-1.0, t_ff_index=1.0, \
-                 max_half_life=1e14, min_half_life=1000,\
-                 use_net_yields_stable=False,\
+                 max_half_life=1e14, min_half_life=1000, t_merge=-1.0, \
                  substeps = [2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64, 96, 128, 192, 256, 384],\
                  tolerance = 1e-5, min_val = 1e-20, print_param=False,\
-                 delayed_extra_log=False, delayed_extra_yields_log_int=False, \
-                 r_vir_array=np.array([]), nsm_dtd_power=np.array([]), \
-                 dt_in_SSPs=np.array([]), SSPs_in=np.array([]), is_SF_t=np.array([]), \
-                 DM_array=np.array([]), ism_ini=np.array([]), ism_ini_radio=np.array([]), \
-                 mdot_ini=np.array([]), mdot_ini_t=np.array([]), ytables_in=np.array([]), \
-                 zm_lifetime_grid_nugrid_in=np.array([]), isotopes_in=np.array([]), \
-                 ytables_pop3_in=np.array([]), zm_lifetime_grid_pop3_in=np.array([]), \
-                 ytables_1a_in=np.array([]), ytables_nsmerger_in=np.array([]),\
-                 dt_in=np.array([]), dt_split_info=np.array([]), ej_massive=np.array([]), \
-                 ej_agb=np.array([]), ej_sn1a=np.array([]), ej_massive_coef=np.array([]),\
-                 ej_agb_coef=np.array([]), ej_sn1a_coef=np.array([]), m_trans_in=np.array([]),\
-                 mass_sampled=np.array([]), scale_cor=np.array([]), \
-                 poly_fit_dtd_5th=np.array([]), poly_fit_range=np.array([]), \
-                 outer_ini_f=np.array([]), ymgal_outer_ini=np.array([]), \
-                 sne_L_feedback=np.array([]), sfe_t=np.array([]), \
-                 sfh_with_sfe=np.array([]),\
-                 delayed_extra_dtd=np.array([]), delayed_extra_dtd_norm=np.array([]), \
-                 delayed_extra_yields=np.array([]), delayed_extra_yields_norm=np.array([]), \
-                 dmo_ini=np.array([]), dmo_ini_t=np.array([]),\
-                 delayed_extra_yields_radio=np.array([]), \
-                 delayed_extra_yields_norm_radio=np.array([]), \
-                 ytables_radio_in=np.array([]), radio_iso_in=np.array([]), \
-                 ytables_1a_radio_in=np.array([]), ytables_nsmerger_radio_in=np.array([]),\
-                 test_clayton=np.array([]), exp_infall=np.array([]), m_inflow_in=np.array([]),\
-                 is_sub_array=np.array([]),\
-                 inter_Z_points = np.array([]),\
-                 nb_inter_Z_points = np.array([]), y_coef_M = np.array([]),\
-                 y_coef_M_ej = np.array([]), y_coef_Z_aM = np.array([]),\
-                 y_coef_Z_bM = np.array([]), y_coef_Z_bM_ej = np.array([]),\
-                 tau_coef_M = np.array([]), tau_coef_M_inv = np.array([]),\
-                 tau_coef_Z_aM = np.array([]), tau_coef_Z_bM = np.array([]),\
-                 tau_coef_Z_aM_inv = np.array([]), tau_coef_Z_bM_inv = np.array([]),\
-                 y_coef_M_pop3 = np.array([]), y_coef_M_ej_pop3 = np.array([]),\
-                 tau_coef_M_pop3 = np.array([]), tau_coef_M_pop3_inv = np.array([]),\
-                 inter_lifetime_points_pop3=np.array([]),\
-                 inter_lifetime_points_pop3_tree=np.array([]),\
-                 nb_inter_lifetime_points_pop3=np.array([]),\
-                 inter_lifetime_points=np.array([]),inter_lifetime_points_tree=np.array([]),\
-                 nb_inter_lifetime_points=np.array([]), nb_inter_M_points_pop3=np.array([]),\
-                 inter_M_points_pop3_tree=np.array([]), nb_inter_M_points=np.array([]),\
-                 inter_M_points=np.array([]), y_coef_Z_aM_ej=np.array([])):
+                 is_SF_t=np.array([]), outer_ini_f=np.array([]), ymgal_outer_ini=np.array([]), \
+                 sne_L_feedback=np.array([]), sfe_t=np.array([]), sfh_with_sfe=np.array([]),\
+                 dmo_ini=np.array([]), dmo_ini_t=np.array([]), exp_infall=np.array([]), \
+                 m_inflow_in=np.array([]), is_sub_array=np.array([]), **kwargs):
 
         # Not implemented yet
         if len(sne_L_feedback) > 0:
@@ -161,79 +100,20 @@ class omega_plus():
                 except:
                     raise
 
-        # Set the initial mass of the inner reservoir
-        if mgal > 0.0:
-            the_mgal = mgal
-        else:
-            the_mgal = 1.0
+        # Reset the initial mass of the inner reservoir if needed
+        if mgal <= 0:
+            mgal = 1.0
 
         # Declare the inner region (OMEGA instance)
-        self.inner = omega.omega(in_out_control=True, SF_law=False, DM_evolution=False, \
-            sfe=sfe, t_star=t_star, mass_loading=mass_loading, \
-            external_control=True, use_external_integration=True, \
-            Z_trans=Z_trans, imf_type=imf_type, alphaimf=alphaimf, imf_bdys=imf_bdys, \
-            sn1a_rate=sn1a_rate, iniZ=iniZ, dt=dt, special_timesteps=special_timesteps, \
-            tend=tend, mgal=the_mgal, transitionmass=transitionmass, table=table, \
-            sn1a_on=sn1a_on, sn1a_table=sn1a_table, ns_merger_on=ns_merger_on, \
-            table_radio=table_radio, decay_file=decay_file,\
-            high_mass_extrapolation=high_mass_extrapolation,\
-            sn1a_table_radio=sn1a_table_radio, nb_nsm_per_m=nb_nsm_per_m,\
-            nsmerger_table_radio=nsmerger_table_radio, ism_ini_radio=ism_ini_radio,\
-            f_binary=f_binary, f_merger=f_merger, t_merger_max=t_merger_max, \
-            m_ej_nsm=m_ej_nsm, nsmerger_table=nsmerger_table, iniabu_table=iniabu_table, \
-            pop3_table=pop3_table, imf_bdys_pop3=imf_bdys_pop3, exp_ml=exp_ml, \
-            m_crit_on=m_crit_on, norm_crit_m=norm_crit_m, beta_crit=beta_crit, \
-            imf_yields_range_pop3=imf_yields_range_pop3, beta_pow=beta_pow, \
-            gauss_dtd=gauss_dtd, exp_dtd=exp_dtd, nb_1a_per_m=nb_1a_per_m, t_merge=t_merge, \
-            imf_yields_range=imf_yields_range, exclude_masses=exclude_masses, \
-            skip_zero=skip_zero, redshift_f=redshift_f, print_off=print_off, \
-            calc_SSP_ej=calc_SSP_ej, input_yields=input_yields, \
-            popIII_info_fast=popIII_info_fast, \
-            t_sf_z_dep=t_sf_z_dep, mass_frac_SSP=mass_frac_SSP, t_nsm_coal=t_nsm_coal, \
-            imf_rnd_sampling=imf_rnd_sampling, ism_ini=ism_ini, mdot_ini=mdot_ini, \
-            mdot_ini_t=mdot_ini_t, ytables_in=ytables_in, DM_array=DM_array, \
-            zm_lifetime_grid_nugrid_in=zm_lifetime_grid_nugrid_in, r_vir_array=r_vir_array,\
-            isotopes_in=isotopes_in, ytables_pop3_in=ytables_pop3_in,\
-            zm_lifetime_grid_pop3_in=zm_lifetime_grid_pop3_in, ytables_1a_in=ytables_1a_in, \
-            ytables_nsmerger_in=ytables_nsmerger_in, dt_in=dt_in, dt_split_info=dt_split_info, \
-            delayed_extra_log=delayed_extra_log,\
-            delayed_extra_yields_log_int=delayed_extra_yields_log_int,\
-            ej_massive=ej_massive, ej_agb=ej_agb, ej_sn1a=ej_sn1a, \
-            ej_massive_coef=ej_massive_coef, ej_agb_coef=ej_agb_coef, \
-            ej_sn1a_coef=ej_sn1a_coef, \
-            mass_sampled=mass_sampled, scale_cor=scale_cor, m_DM_0=m_DM_0,\
-            poly_fit_dtd_5th=poly_fit_dtd_5th, poly_fit_range=poly_fit_range,\
-            pre_calculate_SSPs=pre_calculate_SSPs, dt_in_SSPs=dt_in_SSPs, SSPs_in=SSPs_in,\
-            delayed_extra_dtd=delayed_extra_dtd, delayed_extra_dtd_norm=delayed_extra_dtd_norm, \
-            delayed_extra_yields=delayed_extra_yields, \
-            delayed_extra_yields_norm=delayed_extra_yields_norm, \
-            delayed_extra_yields_radio=delayed_extra_yields_radio,\
-            delayed_extra_yields_norm_radio=delayed_extra_yields_norm_radio,\
-            ytables_radio_in=ytables_radio_in, radio_iso_in=radio_iso_in,\
-            ytables_1a_radio_in=ytables_1a_radio_in,\
-            ytables_nsmerger_radio_in=ytables_nsmerger_radio_in,\
-            test_clayton=test_clayton, radio_refinement=radio_refinement,\
-            nsm_dtd_power=nsm_dtd_power,\
-            use_net_yields_stable=use_net_yields_stable,\
-            inter_Z_points=inter_Z_points,\
-            nb_inter_Z_points=nb_inter_Z_points, y_coef_M=y_coef_M,\
-            y_coef_M_ej=y_coef_M_ej, y_coef_Z_aM=y_coef_Z_aM,\
-            y_coef_Z_bM=y_coef_Z_bM, y_coef_Z_bM_ej=y_coef_Z_bM_ej,\
-            tau_coef_M=tau_coef_M, tau_coef_M_inv=tau_coef_M_inv,\
-            tau_coef_Z_aM=tau_coef_Z_aM, tau_coef_Z_bM=tau_coef_Z_bM,\
-            tau_coef_Z_aM_inv=tau_coef_Z_aM_inv, tau_coef_Z_bM_inv=tau_coef_Z_bM_inv,\
-            y_coef_M_pop3=y_coef_M_pop3, y_coef_M_ej_pop3=y_coef_M_ej_pop3,\
-            tau_coef_M_pop3=tau_coef_M_pop3, tau_coef_M_pop3_inv=tau_coef_M_pop3_inv,\
-            inter_lifetime_points_pop3=inter_lifetime_points_pop3,\
-            inter_lifetime_points_pop3_tree=inter_lifetime_points_pop3_tree,\
-            nb_inter_lifetime_points_pop3=nb_inter_lifetime_points_pop3,\
-            inter_lifetime_points=inter_lifetime_points,\
-            inter_lifetime_points_tree=inter_lifetime_points_tree,\
-            nb_inter_lifetime_points=nb_inter_lifetime_points,\
-            nb_inter_M_points_pop3=nb_inter_M_points_pop3,\
-            inter_M_points_pop3_tree=inter_M_points_pop3_tree,\
-            nb_inter_M_points=nb_inter_M_points, inter_M_points=inter_M_points,\
-            y_coef_Z_aM_ej=y_coef_Z_aM_ej)
+        kwargs["in_out_control"] = True
+        kwargs["SF_law"] = False
+        kwargs["DM_evolution"] = False
+        kwargs["external_control"] = True
+        kwargs["use_external_integration"] = True
+        kwargs["mgal"] = mgal
+        kwargs["print_off"] = print_off
+        kwargs["t_merge"] = t_merge
+        self.inner = omega.omega(**kwargs)
 
         # Parameters associated with OMEGA+
         self.m_outer_ini = m_outer_ini
@@ -374,8 +254,6 @@ class omega_plus():
         if len(self.sfe_t) > 0:
             print ('sfe_t option is not yet implemented.')
             self.treat_sfe_t = False
-            #self.treat_sfe_t = True
-            #self.__define_SF_timeframes()
         else:
             self.treat_sfe_t = False
 
