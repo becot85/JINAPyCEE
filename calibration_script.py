@@ -1,11 +1,13 @@
-import matplotlib.pyplot as plt
 import numpy as np
 import copy
 
 from JINAPyCEE import omega_plus
 
-def get_value(array, time_array, time = None):
-    '''Interpolate array at time "time"'''
+def get_value(array, time_array, time=None):
+    '''
+    Interpolate array at time "time"
+    '''
+
     if time is None:
         print("Please, provide an age for calculation. Returning 0")
         return 0
@@ -53,10 +55,10 @@ def run_omega(kwargs, param_vals, param_norms, time = 8.4e9):
     cc_sne_rate = op.inner.sn2_numbers[-1]/op.inner.history.timesteps[-1]
     Ia_sne_rate = op.inner.sn1a_numbers[-1]/op.inner.history.timesteps[-1]
     metallicity = get_value(op.inner.history.metallicity, op.inner.history.age,
-                            time = time)
+                            time=time)
 
     time_arr, feh_arr = op.inner.plot_spectro(solar_norm='Asplund_et_al_2009', return_x_y=True)
-    FeH = get_value(feh_arr, time_arr, time = time)
+    FeH = get_value(feh_arr, time_arr, time=time)
 
     # Store values and return
     values = {}
@@ -71,7 +73,9 @@ def run_omega(kwargs, param_vals, param_norms, time = 8.4e9):
     return op, values
 
 def copy_yields(kwargs, op):
-    '''Copy the yields from the op simulation to the kwargs dictionary'''
+    '''
+    Copy the yields from the op simulation to the kwargs dictionary
+    '''
 
     kwargs_yields = copy.deepcopy(kwargs)
 
@@ -115,19 +119,27 @@ def copy_yields(kwargs, op):
 
 def run_calibration(kwargs, kwargs_yields, weights, values, param_vals,\
         param_norms, sol_ranges, fix_params, threshold=2e-2,\
-        learning_factor=1e0, max_iter=10, time=8.4e9):
-    '''Calibrate omega using gradient descent'''
+        lf=1e0, momentum=0.5, max_iter=10, time=8.4e9, max_lf_f=2,
+        min_lf_f=1, period_lf=20):
+
+    '''
+    Calibrate omega using gradient descent
+    '''
+
+    # Save the learning factor
+    lf0 = lf
 
     # Get the target solutions and deltas_deriv
     solutions = {}; deltas_deriv = {}
     for key in sol_ranges:
         solutions[key] = np.mean(sol_ranges[key])
     for key in param_vals:
-        deltas_deriv[key] = learning_factor*1e-1
+        deltas_deriv[key] = lf * 1e-1
 
     best_solution = None
     best_parameters = None
     smallest_error = None
+    prev_changes = {key: None for key in param_vals}
 
     # Perform gradient descent
     ii = 0
@@ -137,7 +149,8 @@ def run_calibration(kwargs, kwargs_yields, weights, values, param_vals,\
             print("----------")
             print("Current solution")
             for key, val in values.items():
-                print(f"{key}: {val:.2e}")
+                sol = solutions[key]
+                print(f"{key}: {val:.2e} - {sol:.2e}")
 
             print()
             print("Current parameters")
@@ -160,7 +173,7 @@ def run_calibration(kwargs, kwargs_yields, weights, values, param_vals,\
                 rel_error[key] *= weights[key]/sol
 
                 sum_err += rel_error[key]**2
-                sum_weights += weights[key]
+                sum_weights += weights[key]**2
 
             error = sum_err/sum_weights
             if smallest_error is None or error < smallest_error:
@@ -178,9 +191,16 @@ def run_calibration(kwargs, kwargs_yields, weights, values, param_vals,\
                 break
 
             # If it is not good enough, calculate the derivatives
-            derivatives = {}; maxDeriv = 0
             param_cpy = copy.copy(param_vals)
+            norm_gradient = 0
+            derivs = {}
             for key in param_vals:
+                derivs[key] = 0
+
+                # If this parameter is fixed, do not change it
+                if fix_params[key]:
+                    continue
+
                 print(f"Derivating parameter {key}")
 
                 # Change only one parameter
@@ -195,12 +215,7 @@ def run_calibration(kwargs, kwargs_yields, weights, values, param_vals,\
                 # Calculate derivative
                 # This array holds the derivative of all the values (sfr, inflow...)
                 # with respect to the ii-th parameter (a1, b1, imf_yield_top, sfe...)
-                derivs = []
                 for key2 in values:
-                    # If this parameter is fixed, do not change it
-                    if fix_params[key]:
-                        derivs = [0]
-                        break
 
                     # Because the solution of FeH is 0, we do not divide by it.
                     if key2 == "FeH":
@@ -208,47 +223,51 @@ def run_calibration(kwargs, kwargs_yields, weights, values, param_vals,\
                     else:
                         sol = solutions[key2]
 
-                    der = 2*rel_error[key2]*weights[key2]/sol
+                    der = rel_error[key2]*weights[key2]/sol
                     der *= (new_values[key2] - values[key2])/deltas_deriv[key]
-                    derivs.append(der)
-
-                # We are interested in the average of the derivative
-                derivs = np.array(derivs)
-                derivatives[key] = np.mean(derivs)
-                maxDeriv = max([max(abs(derivs)), maxDeriv])
+                    derivs[key] += der
+                derivs[key] *= 2
+                norm_gradient += derivs[key]**2
 
                 # Restore the previous value
                 param_cpy[key] = param_vals[key]
-            # Now make sure that the total change in parameter space is lower than
-            # the learning_factor
-            norm = 0
-            for key in derivatives:
-                norm += derivatives[key]**2
-            norm = np.sqrt(norm)
-            max_move = learning_factor*error/maxDeriv
-            if norm > max_move:
-                for key in derivatives:
-                    derivatives[key] *= max_move/norm
 
-            # Also make sure that no parameter goes below zero
-            move_no_zero = min(max_move, norm)
-            for key in derivatives:
-                if param_vals[key] - derivatives[key] < 0:
-                    if param_vals[key] < move_no_zero:
-                        move_no_zero = param_vals[key]
-            for key in derivatives:
-                derivatives[key] *= move_no_zero/min(max_move, norm)
+            # And multiply by factors
+            changes = {}
+            for key in derivs:
+                changes[key] = derivs[key] * lf
+                if prev_changes[key] is not None:
+                    changes[key] *= (1 - momentum)
 
-            # Re-scale the deltas_deriv
-            for key in derivatives:
-                deltas_deriv[key] = derivatives[key]*1e-1
+            # Re-calculate deltas
+            for key in deltas_deriv:
+                deltas_deriv[key] = abs(changes[key]) * lf * 1e-1
+                deltas_deriv[key] = max(deltas_deriv[key],
+                        abs(1e-1 * lf * param_vals[key]))
 
-            # Now finally calculate the new parameters and do the new run
+            # Now calculate the new parameters and do the new run
             print("Calculating next solution")
-            for key in derivatives:
-                param_vals[key] -= derivatives[key]
+            for key in derivs:
+                # calculate change with momentum
+                if prev_changes[key] is not None:
+                    changes[key] += momentum * prev_changes[key]
+
+                # Apply change
+                param_vals[key] -= changes[key]
+
+            # Store change
+            prev_changes = changes
+
+            # Run omega with the new parameters
             op, values = run_omega(kwargs, param_vals, param_norms)
             kwargs_yields = copy_yields(kwargs, op)
+
+            # Change learning factor with the period given by the user
+            if ii%period_lf < period_lf/2:
+                lf = 2*(max_lf_f - min_lf_f)/period_lf*(ii%period_lf) + min_lf_f
+            else:
+                lf = 2*(min_lf_f - max_lf_f)/period_lf*(ii%period_lf - period_lf/2) + max_lf_f
+            lf *= lf0
 
             ii += 1
             if (ii > max_iter):
@@ -277,10 +296,22 @@ def run_calibration(kwargs, kwargs_yields, weights, values, param_vals,\
         val = param_vals[key]*param_norms[key]
         print(f"{key}: {val:.2e}")
 
+    print()
+    print(f"Iterations: {ii}")
+
 # Parameters for the machine-learning
-threshold = 1e-2 # Maximum relative error
-learning_factor = 1e0 # Controls the maximum parameter step (does not need to be < 1)
-max_iter = 200 # Maximum iterations before the program exits
+
+# Maximum relative error
+threshold = 1e-3 # Maximum relative error
+
+# Maximum parameter step when error = 1
+learning_factor = 5e-2
+
+# Momentum of the descent
+momentum = 0.90
+
+# Maximum iterations before the program exits
+max_iter = 200
 
 # Define omega arguments
 table = 'yield_tables/AK_stable.txt'
@@ -297,18 +328,18 @@ kwargs["m_DM_0"] = 1.0e12
 kwargs["sn1a_rate"] = 'power_law'
 kwargs["print_off"] = True
 
-kwargs["special_timesteps"] = 150
+kwargs["special_timesteps"] = 80
 #kwargs["dt"] = 5e8
 
 # Weight dictionary
 weights = {}
 weights["sfr"] = 1
-weights["inflow_rate"] = 0.5
+weights["inflow_rate"] = 1
 weights["m_gas"] = 1
 weights["cc_sne_rate"] = 1
 weights["Ia_sne_rate"] = 1
-weights["FeH"] = 0
-weights["metallicity"] = 10
+weights["FeH"] = 0.1
+weights["metallicity"] = 2
 
 # Define ranges of solutions. The solution must fall inside these ranges
 sol_ranges = {}
@@ -331,11 +362,11 @@ param_ranges["mass_loading"] = [0, 2]
 
 # Initial values (guess for parameter values)
 param_vals = {}
-param_vals["a1"] = 22.9
-param_vals["b1"] = 6.86
-param_vals["imf_yield_top"] = 47.8
-param_vals["sfe"] = 1.94e-10
-param_vals["mass_loading"] = 0.671
+param_vals["a1"] = 96.6
+param_vals["b1"] = 5.78
+param_vals["imf_yield_top"] = 28.6
+param_vals["sfe"] = 2.36e-10
+param_vals["mass_loading"] = 0.6
 
 # Whether to fix a parameter so it does not change
 fix_params = {}
@@ -363,5 +394,6 @@ kwargs_yields = copy_yields(kwargs, op)
 # Now calibrate:
 time = 8.4e9
 run_calibration(kwargs, kwargs_yields, weights, values, param_vals,\
-        param_norms, sol_ranges, fix_params, threshold = threshold,\
-        learning_factor = learning_factor, max_iter = max_iter, time = time)
+        param_norms, sol_ranges, fix_params, threshold=threshold,\
+        lf=learning_factor, momentum=momentum, max_iter=max_iter, time=time,\
+        max_lf_f=2, min_lf_f=0.5, period_lf=20)
