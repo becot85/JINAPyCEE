@@ -249,7 +249,7 @@ class omega_plus():
         self.gamma_cte = 7.792e8 * self.E_51 / self.G_cgs
 
         # If active SF is only allowed for specific timeframes ..
-        self.SF_allowed_t = [True]*self.inner.nb_timesteps
+        self.SF_allowed_t = [True]*(self.inner.nb_timesteps+1)
         self.treat_sfh_with_sfe = False
         if len(self.sfe_t) > 0:
             print ('sfe_t option is not yet implemented.')
@@ -296,14 +296,14 @@ class omega_plus():
         '''
 
         # Create the SFE array
-        self.sfe = [0.0]*self.inner.nb_timesteps
+        self.sfe = [0.0]*(self.inner.nb_timesteps+1)
 
         # If the SFE depends on the dark matter mass ..
         if self.sfe_m_dep:
 
             # Calculate the SFE with the DM mass in OMEGA
             m_DM_inv = 1.0 / self.inner.m_DM_0
-            for i_sfe in range(0,self.inner.nb_timesteps):
+            for i_sfe in range(0,self.inner.nb_timesteps+1):
                 self.sfe[i_sfe] = self.inner.sfe * \
                     (self.inner.m_DM_t[i_sfe] * m_DM_inv)**(self.sfe_m_index)
 
@@ -311,13 +311,13 @@ class omega_plus():
         else:
 
             # Use the value of OMEGA
-            for i_sfe in range(0,self.inner.nb_timesteps):
+            for i_sfe in range(0,self.inner.nb_timesteps+1):
                 self.sfe[i_sfe] = self.inner.sfe
 
         # Create the interpolation coefficients
         # sfe = self.sfe_coef[0] * t + self.sfe_coef[1]
-        self.sfe_coef = np.zeros((self.inner.nb_timesteps,2))
-        for i_cmdt in range(self.inner.nb_timesteps-1):
+        self.sfe_coef = np.zeros((self.inner.nb_timesteps+1,2))
+        for i_cmdt in range(self.inner.nb_timesteps):
             self.sfe_coef[i_cmdt][0] = (self.sfe[i_cmdt+1] - \
                 self.sfe[i_cmdt]) / self.inner.history.timesteps[i_cmdt]
             self.sfe_coef[i_cmdt][1] = self.sfe[i_cmdt] - \
@@ -1288,7 +1288,9 @@ class omega_plus():
 
         # If external control ...
         if self.inner.external_control:
-            self.inner.history.sfr_abs[i_step_OMEGA] = self.inner.history.sfr_abs[i_step_OMEGA-1]
+            i_last = len(self.inner.ymgal) - 1
+            sfr_last = self.__get_SFR(i_last, sum(self.inner.ymgal[i_last]))
+            self.inner.history.sfr_abs[i_last] = sfr_last
 
         # Calculate the total mass of gas
         self.inner.m_stel_tot = 0.0
@@ -1949,7 +1951,7 @@ class omega_plus():
         self.sum_inner_ymgal_cur = np.sum(self.inner.ymgal[i_step_OMEGA+1])
 
         # Get the SFR of the next timestep if no gas is added
-        sfr_next = self.__get_SFR(i_step_OMEGA+1)
+        sfr_next = self.__get_SFR(i_step_OMEGA+1, self.sum_inner_ymgal_cur)
 
         # Calculate the star formation rate ratio (input / what would happen)
         if sfr_next <= 0.0:
