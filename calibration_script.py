@@ -1,16 +1,28 @@
 import numpy as np
 import copy
+from random import random
 
 from JINAPyCEE import omega_plus
 
-def get_value(array, time_array, time=None):
+def linear_interp(array, time_array, time):
     '''
     Interpolate array at time "time"
     '''
 
-    if time is None:
-        print("Please, provide an age for calculation. Returning 0")
-        return 0
+    err_msg = f"Interpolation time {time:.2e}"
+    err_msg2 = "than time_array"
+
+    # Time greater than time_arr[-1]
+    if time_array[-1] < time:
+        s = err_msg + " greater " + err_msg2
+        s += f"[-1], {time_array[-1]:.2e}"
+        raise Exception(s)
+
+    # Time lower than time_arr[0]
+    if time_array[0] > time:
+        s = err_msg + " lower " + err_msg2
+        s += f"[0], {time_array[0]:.2e}"
+        raise Exception(s)
 
     # Search for the time
     for ii in range(len(array)):
@@ -21,53 +33,74 @@ def get_value(array, time_array, time=None):
             val1 = array[ii - 1]
             val2 = array[ii]
 
-            break
+            # Interpolate linearly
+            val = (time - time1)*(val2 - val1)/(time2 - time1) + val1
+            return val
 
-    # Interpolate linearly
-    val = (time - time1)*(val2 - val1)/(time2 - time1) + val1
-    return val
-
-def run_omega(kwargs, param_vals, param_norms, time = 8.4e9):
+def run_omega(kwargs, param_vals, param_norms, time=8.4e9):
     '''Run omega with all the parameters'''
 
     # Recover parameters
-    a1 = param_vals["a1"]*param_norms["a1"]
-    b1 = param_vals["b1"]*param_norms["b1"]
-    imf_yield_top = param_vals["imf_yield_top"]*param_norms["imf_yield_top"]
-    sfe = param_vals["sfe"]*param_norms["sfe"]
-    mass_loading = param_vals["mass_loading"]*param_norms["mass_loading"]
+    kwargs_alt = {}
+    for key in param_vals:
+        if key not in ["a1", "b1", "imf_yield_top"]:
+            kwargs[key] = param_vals[key] * param_norms[key]
+        else:
+            kwargs_alt[key] = param_vals[key] * param_norms[key]
 
     # Define the inflow rates
     # [norm, t_max, timescale]
-    exp_infall = [[a1, 0.0, 0.68e9], [b1, 1.0e9, 7.0e9]] # this is good
-    kwargs["imf_yields_range"] = [1, imf_yield_top]
-    kwargs["sfe"] = sfe
-    kwargs["mass_loading"] = mass_loading
+    exp_infall = [[kwargs_alt["a1"], 0.0, 0.68e9],
+                  [kwargs_alt["b1"], 1.0e9, 7.0e9]] # this is good
     kwargs["exp_infall"] = exp_infall
+    kwargs["imf_yields_range"] = [1, kwargs_alt["imf_yield_top"]]
 
     # Running omega
     op = omega_plus.omega_plus(**kwargs)
 
     # Extract values
+    time_arr = op.inner.history.age
     sfr = op.inner.history.sfr_abs[-1]
     inflow_rate = op.inner.m_inflow_t[-1]/op.inner.history.timesteps[-1]
     m_gas = np.sum(op.inner.ymgal[-1])
     cc_sne_rate = op.inner.sn2_numbers[-1]/op.inner.history.timesteps[-1]
     Ia_sne_rate = op.inner.sn1a_numbers[-1]/op.inner.history.timesteps[-1]
-    metallicity = get_value(op.inner.history.metallicity, op.inner.history.age,
-                            time=time)
 
-    time_arr, feh_arr = op.inner.plot_spectro(solar_norm='Asplund_et_al_2009', return_x_y=True)
-    FeH = get_value(feh_arr, time_arr, time=time)
+    # Get the metallicity (mass fraction)
+    metallicity = np.zeros(op.inner.nb_timesteps + 1)
+    for i_t in range(op.inner.nb_timesteps + 1):
+        m_Z = 0.0
+        for iso, y in zip(op.inner.history.isotopes, op.inner.ymgal[i_t]):
+            if iso.split("-")[0] not in ["H", "He", "Li"]:
+                m_Z += y
+        metallicity[i_t] = m_Z / np.sum(op.inner.ymgal[i_t])
+
+    metallicity = linear_interp(metallicity, time_arr, time=time)
+
+    # Get stellar mass
+    m_star_lost = np.sum(np.sum(op.inner.mdot))
+    stellar_mass = np.sum(op.inner.history.m_locked) - m_star_lost
+
+    # Get abundances at time of sun formation
+    masses = linear_interp(op.inner.ymgal, time_arr, time=time)
+    m_tot = np.sum(masses)
+
+    # Grab the iron
+    name = "Fe"
+    indices = [ii for ii, x in enumerate(op.inner.history.isotopes)
+                    if x.split("-")[0] == name]
+    FeMass = np.sum(masses[indices])
+    XFe = FeMass/m_tot
 
     # Store values and return
     values = {}
     values["sfr"] = sfr
+    values["stellar_mass"] = stellar_mass
     values["inflow_rate"] = inflow_rate
     values["m_gas"] = m_gas
     values["cc_sne_rate"] = cc_sne_rate
     values["Ia_sne_rate"] = Ia_sne_rate
-    values["FeH"] = FeH
+    values["XFe"] = XFe
     values["metallicity"] = metallicity
 
     return op, values
@@ -163,14 +196,7 @@ def run_calibration(kwargs, kwargs_yields, weights, values, param_vals,\
             sum_err = 0; sum_weights = 0
             for key in values:
                 rel_error[key] = (values[key] - solutions[key])
-
-                # Because the solution of FeH is 0, we do not divide by it.
-                if key == "FeH":
-                    sol = 1
-                else:
-                    sol = solutions[key]
-
-                rel_error[key] *= weights[key]/sol
+                rel_error[key] *= weights[key]/solutions[key]
 
                 sum_err += rel_error[key]**2
                 sum_weights += weights[key]**2
@@ -182,13 +208,17 @@ def run_calibration(kwargs, kwargs_yields, weights, values, param_vals,\
                 best_parameters = copy.copy(param_vals)
 
             print()
-            print(f"Current error = {error:.3f}; threshold = {threshold:.3f}")
+            print(f"Current error = {error:.4f}; threshold = {threshold:.4f}")
             print()
             if error < threshold:
                 print("----------")
                 print()
                 print("Error threshold achieved")
                 break
+
+            # Open derivatives file
+            deriv_file = "derivatives.txt"
+            fwrite = open(deriv_file, "w")
 
             # If it is not good enough, calculate the derivatives
             param_cpy = copy.copy(param_vals)
@@ -216,21 +246,26 @@ def run_calibration(kwargs, kwargs_yields, weights, values, param_vals,\
                 # This array holds the derivative of all the values (sfr, inflow...)
                 # with respect to the ii-th parameter (a1, b1, imf_yield_top, sfe...)
                 for key2 in values:
+                    # Do parametric derivative
+                    der = (new_values[key2] - values[key2])/deltas_deriv[key]
 
-                    # Because the solution of FeH is 0, we do not divide by it.
-                    if key2 == "FeH":
-                        sol = 1
-                    else:
-                        sol = solutions[key2]
+                    # Save
+                    val = der/param_norms[key]
+                    s = f"Derivative of {key2} with {key} = {val:.2e}\n"
+                    fwrite.write(s)
 
-                    der = rel_error[key2]*weights[key2]/sol
-                    der *= (new_values[key2] - values[key2])/deltas_deriv[key]
+                    # Continue with relative error derivative
+                    der *= rel_error[key2]*weights[key2]/solutions[key2]
                     derivs[key] += der
                 derivs[key] *= 2
                 norm_gradient += derivs[key]**2
 
                 # Restore the previous value
                 param_cpy[key] = param_vals[key]
+                fwrite.write("=========\n")
+
+            # Close derivatives file
+            fwrite.close()
 
             # And multiply by factors
             changes = {}
@@ -282,39 +317,54 @@ def run_calibration(kwargs, kwargs_yields, weights, values, param_vals,\
             raise
 
     # Print best solution
-    print()
-    print("----------")
-    print(f"Best solution with error: {smallest_error:.4f}")
-    values = best_solution
-    for key, val in values.items():
-        print(f"{key}: {val:.2e}")
+    with open("output.txt", "w") as fwrite:
+        print()
+        print("----------")
+        s = f"Best solution with error: {smallest_error:.4f}"
+        print(s)
+        fwrite.write(s + "\n")
 
-    print()
-    print("Best parameters")
-    param_vals = best_parameters
-    for key in param_vals:
-        val = param_vals[key]*param_norms[key]
-        print(f"{key}: {val:.2e}")
+        values = best_solution
+        for key, val in values.items():
+            s = f"{key} = {val:.2e}"
 
-    print()
-    print(f"Iterations: {ii}")
+            print(s)
+            fwrite.write(s + "\n")
+
+        print()
+        s = "Best parameters"
+        print(s)
+        fwrite.write("\n" + s + "\n")
+
+        param_vals = best_parameters
+        param_vals["t_sun"] = time
+        param_norms["t_sun"] = 1
+        for key in param_vals:
+            val = param_vals[key]*param_norms[key]
+            s = f"{key} = {val:.2e}"
+
+            print(s)
+            fwrite.write(s + "\n")
+
+        print()
+        print(f"Iterations: {ii}")
 
 # Parameters for the machine-learning
 
 # Maximum relative error
-threshold = 1e-3 # Maximum relative error
+threshold = 5e-4 # Maximum relative error
 
 # Maximum parameter step when error = 1
-learning_factor = 5e-2
+learning_factor = 1e-4
 
 # Momentum of the descent
 momentum = 0.90
 
 # Maximum iterations before the program exits
-max_iter = 200
+max_iter = 10
 
 # Define omega arguments
-table = 'yield_tables/AK_stable.txt'
+#table = 'yield_tables/AK_stable.txt'
 #table = 'yield_tables/agb_and_massive_stars_nugrid_MESAonly_fryer12delay.txt'
 table = 'yield_tables/agb_and_massive_stars_K10_K06_0.5HNe.txt'
 
@@ -328,28 +378,30 @@ kwargs["m_DM_0"] = 1.0e12
 kwargs["sn1a_rate"] = 'power_law'
 kwargs["print_off"] = True
 
-kwargs["special_timesteps"] = 80
+kwargs["special_timesteps"] = 300
 #kwargs["dt"] = 5e8
 
 # Weight dictionary
 weights = {}
 weights["sfr"] = 1
+weights["stellar_mass"] = 1
 weights["inflow_rate"] = 1
 weights["m_gas"] = 1
 weights["cc_sne_rate"] = 1
 weights["Ia_sne_rate"] = 1
-weights["FeH"] = 0.1
-weights["metallicity"] = 2
+weights["XFe"] = 1
+weights["metallicity"] = 4
 
 # Define ranges of solutions. The solution must fall inside these ranges
 sol_ranges = {}
-sol_ranges["sfr"] = [0.65, 3.00]
-sol_ranges["inflow_rate"] = [0.6, 1.6]
-sol_ranges["m_gas"] = [3.6e9, 1.26e10]
-sol_ranges["cc_sne_rate"] = [1e-2, 3e-2]
-sol_ranges["Ia_sne_rate"] = [2e-3, 6e-3]
-sol_ranges["FeH"] = [-0.001, 0.001]
-sol_ranges["metallicity"] = [0.0135, 0.0145]
+sol_ranges["sfr"] = [2.5, 3.5]
+sol_ranges["stellar_mass"] = [3.0e10, 4.0e10]
+sol_ranges["inflow_rate"] = [0.1, 1.1]
+sol_ranges["m_gas"] = [1.21e10, 1.31e10]
+sol_ranges["cc_sne_rate"] = [2.5e-2, 3.5e-2]
+sol_ranges["Ia_sne_rate"] = [5e-3, 7e-3]
+sol_ranges["XFe"] = [1.28e-3, 1.32e-3]
+sol_ranges["metallicity"] = [0.0152, 0.0154]
 
 # Define ranges of parameters. These give an idea to the code on the scale
 # of the changes it should expect, but they are not hard limits.
@@ -359,14 +411,16 @@ param_ranges["b1"] = [0, 15]
 param_ranges["imf_yield_top"] = [20, 50]
 param_ranges["sfe"] = [1e-10, 1e-9]
 param_ranges["mass_loading"] = [0, 2]
+param_ranges["nb_1a_per_m"] = [5e-4, 2e-3]
 
 # Initial values (guess for parameter values)
 param_vals = {}
-param_vals["a1"] = 96.6
-param_vals["b1"] = 5.78
-param_vals["imf_yield_top"] = 28.6
-param_vals["sfe"] = 2.36e-10
-param_vals["mass_loading"] = 0.6
+param_vals["a1"] = 52.3
+param_vals["b1"] = 3.47
+param_vals["imf_yield_top"] = 36.0
+param_vals["sfe"] = 1.65e-10
+param_vals["mass_loading"] = 0.170
+param_vals["nb_1a_per_m"] = 1.59e-3
 
 # Whether to fix a parameter so it does not change
 fix_params = {}
@@ -375,6 +429,7 @@ fix_params["b1"] = False
 fix_params["imf_yield_top"] = False
 fix_params["sfe"] = False
 fix_params["mass_loading"] = False
+fix_params["nb_1a_per_m"] = False
 
 # -------------- Do not change anything below this line -------------------
 
