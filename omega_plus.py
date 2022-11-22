@@ -737,6 +737,15 @@ class omega_plus():
         for ii in range(self.inner.nb_delayed_extra_radio):
             self.ymgal_outer_extra_radio.append(copy.deepcopy(zeroArr))
 
+        zeroArr = np.zeros((self.inner.nb_timesteps, self.inner.nb_radio_iso))
+        self.inner.mdot_radio = copy.deepcopy(zeroArr)
+        self.inner.mdot_massive_radio = copy.deepcopy(zeroArr)
+        self.inner.mdot_agb_radio = copy.deepcopy(zeroArr)
+        self.inner.mdot_1a_radio = copy.deepcopy(zeroArr)
+        self.inner.mdot_nsm_radio = copy.deepcopy(zeroArr)
+        for ii in range(self.inner.nb_delayed_extra_radio):
+            self.inner.mdot_delayed_extra_radio[ii] = copy.deepcopy(zeroArr)
+
         # Initialize the decay arrays
         nb_radio = self.inner.nb_radio_iso
         nb_iso = len(self.stable_decayed_isotopes)
