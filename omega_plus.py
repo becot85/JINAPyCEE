@@ -53,6 +53,7 @@ nupy_path = os.path.join(nupy_path, "NuPyCEE")
 # Import NuPyCEE codes
 import NuPyCEE.read_yields as ry
 import NuPyCEE.omega as omega
+import JINAPyCEE.alpha as alpha
 
 
 #####################
@@ -591,875 +592,135 @@ class omega_plus():
 
 
     ##############################################
-    #         Create reaction network            #
-    ##############################################
-    def __create_reac_dictionary(self):
-
-        '''
-        This function creates the network for the decays. It depends on which
-        options are active for omega.
-
-        '''
-
-        # Reaction network dictionary
-        self.reac_dictionary = {}
-
-        # If there is not decay, return now
-        if self.inner.len_decay_file == 0 and not self.inner.use_decay_module:
-            return
-
-        # Dictionary to store all isotopes
-        self.all_isotopes_names = []
-
-        # This dictionary stores all stable isotopes that can
-        # be modified by the present yields
-        self.stable_decayed_isotopes = []
-
-        # Dictionary from name to (z, n) and other direction
-        zn_to_name = {}
-
-        # Shorten the name for self.inner.history.isotopes
-        hist_isotopes = self.inner.history.isotopes
-
-        # Define secondary products depending on the reaction
-        self.decay_secondary = [
-                [], [], ["Nn-1"], ["H-1"], ["He-4"], ["Nn-1"], ["H-1"], ["He-4"],
-                ["He-4"], ["Nn-1", "Nn-1"], ["H-1", "H-1"], ["He-4", "He-4"],
-                ["He-4", "He-4"], ["Nn-1", "Nn-1"], ["Nn-1", "Nn-1", "Nn-1"],
-                ["Nn-1", "Nn-1", "Nn-1", "Nn-1"], ["H-1", "H-1"],
-                ["Nn-1", "He-4"], ["H-1", "He-4"], [], ["C-12"], []
-                ]
-
-        # Seconds in a year
-        self.yr_to_sec = 31536000
-
-        # Copy of radio_iso, to resize it
-        cpy_radio_iso = list(self.inner.radio_iso)
-
-        # Load the multichannel or single channel network if needed
-        # This is done by creating a list of all the decay channels for each of
-        # the radioactive isotopes considered here
-        if self.inner.use_decay_module:
-
-            # Buld zn <-> name dictionaries
-            f_network = os.path.join("decay_data", self.inner.f_network)
-            with open(os.path.join(nupy_path, f_network), "r") as fread:
-                # Skip header line
-                fread.readline()
-
-                # Now store the data
-                for line in fread:
-                    lnlst = line.split()
-                    zz = int(lnlst[0]); aa = int(lnlst[1]); name = lnlst[2]
-
-                    # Create name
-                    name = name + "-" + lnlst[1]
-
-                    nn = aa - zz
-                    zn_to_name[(zz, nn)] = name
-
-            # Get the decay information from the decay module
-            # Store all the isotopic information
-            prevZZ, prevNN = None, None
-            for ii in range(len(self.inner.decay_module.iso.reactions)):
-                # Z and n of every isotope in the module
-                zz = self.inner.decay_module.iso.z[ii]; nn = self.inner.decay_module.iso.n[ii]
-
-                # If not an element, break
-                if (zz + nn) == 0:
-                    break
-
-                # Store name for these zz, nn
-                name = zn_to_name[(zz, nn)]
-
-                # Check if isomer
-                if zz == prevZZ and nn == prevNN:
-                    name = "*" + name
-                    while name in self.all_isotopes_names:
-                        name = "*" + name
-
-                self.all_isotopes_names.append(name)
-                prevZZ, prevNN = zz, nn
-
-            # At this point we need to choose which isotopes to follow
-            # We also store the reactions
-            self.__choose_network(cpy_radio_iso, hist_isotopes)
-
-            # We do not need to use the decay_module anymore, so let's
-            # delete it for pickling and multiprocessing purposes
-            del(self.inner.decay_module)
-
-        elif self.inner.len_decay_file > 0:
-
-            # The information stored in decay_info is...
-            # decay_info[nb_radio_iso][0] --> Unstable isotope
-            # decay_info[nb_radio_iso][1] --> Stable isotope where it decays
-            # decay_info[nb_radio_iso][2] --> Mean-life (half-life/ln2)[yr]
-
-            # Build the network
-            for elem in self.inner.decay_info:
-
-                # Get names for reaction
-                targ = elem[0]; prod = elem[1]; rate = 1 / elem[2]
-
-                # Add reaction
-                reaction = Reaction(targ, prod, rate)
-
-                if targ in self.reac_dictionary:
-                    self.reac_dictionary[targ].append(reaction)
-                else:
-                    self.reac_dictionary[targ] = [reaction]
-
-                # Store stable product self.stable_decayed_isotopes
-                if prod in hist_isotopes:
-                    if prod not in self.stable_decayed_isotopes:
-                        self.stable_decayed_isotopes.append(prod)
-
-        # Restore the (maybe) modified arrays, even if we are declaring them twice
-        self.inner.radio_iso = np.array(cpy_radio_iso)
-        self.inner.nb_radio_iso = len(self.inner.radio_iso)
-        zeroArr = np.zeros((self.inner.nb_timesteps + 1, self.inner.nb_radio_iso))
-
-        self.inner.ymgal_radio = copy.deepcopy(zeroArr)
-        self.inner.ymgal_massive_radio = copy.deepcopy(zeroArr)
-        self.inner.ymgal_agb_radio = copy.deepcopy(zeroArr)
-        self.inner.ymgal_1a_radio = copy.deepcopy(zeroArr)
-        self.inner.ymgal_nsm_radio = copy.deepcopy(zeroArr)
-        for ii in range(self.inner.nb_delayed_extra_radio):
-            self.inner.ymgal_delayed_extra_radio[ii] = copy.deepcopy(zeroArr)
-
-        self.ymgal_outer_radio = copy.deepcopy(zeroArr)
-        self.ymgal_outer_massive_radio = copy.deepcopy(zeroArr)
-        self.ymgal_outer_agb_radio = copy.deepcopy(zeroArr)
-        self.ymgal_outer_1a_radio = copy.deepcopy(zeroArr)
-        self.ymgal_outer_nsm_radio = copy.deepcopy(zeroArr)
-        self.ymgal_outer_extra_radio = []
-        for ii in range(self.inner.nb_delayed_extra_radio):
-            self.ymgal_outer_extra_radio.append(copy.deepcopy(zeroArr))
-
-        zeroArr = np.zeros((self.inner.nb_timesteps, self.inner.nb_radio_iso))
-        self.inner.mdot_radio = copy.deepcopy(zeroArr)
-        self.inner.mdot_massive_radio = copy.deepcopy(zeroArr)
-        self.inner.mdot_agb_radio = copy.deepcopy(zeroArr)
-        self.inner.mdot_1a_radio = copy.deepcopy(zeroArr)
-        self.inner.mdot_nsm_radio = copy.deepcopy(zeroArr)
-        for ii in range(self.inner.nb_delayed_extra_radio):
-            self.inner.mdot_delayed_extra_radio[ii] = copy.deepcopy(zeroArr)
-
-        # Initialize the decay arrays
-        nb_radio = self.inner.nb_radio_iso
-        nb_iso = len(self.stable_decayed_isotopes)
-        self.decay_from_radio = np.zeros(nb_radio)           # dd_radio
-        self.decay_to_radio = np.zeros((nb_radio, nb_radio)) # pp_radio
-        self.decay_to_stable = np.zeros((nb_iso, nb_radio))  # pp
-
-        # Now for each reaction, add to the decay arrays
-        for target in self.reac_dictionary:
-
-            # Get target index
-            targ_index = cpy_radio_iso.index(target)
-
-            # Get the inverse of the atomic mass of the target
-            targ_inv_AA = 1/float(target.split("-")[1])
-
-            for reac in self.reac_dictionary[target]:
-
-                # Add rate for dd_radio
-                self.decay_from_radio[targ_index] += reac.rate
-
-                # Modify rate by dividing for target mass fraction
-                rate_mod_1 = reac.rate*targ_inv_AA
-
-                # Select products list
-                prods = reac.products
-
-                # Rate for pp_radio or pp
-                for ii in range(len(prods)):
-                    prod = prods[ii]
-                    prodAA = float(prod.split("-")[1])
-
-                    # We have to divide the rate by the atomic mass of the
-                    # target and multiply by the atomic mass of the product
-                    # to conserve the total mass
-                    rate_mod_2 = rate_mod_1 * prodAA
-
-                    if prod in cpy_radio_iso:
-                        prod_index = cpy_radio_iso.index(prod)
-                    else:
-                        prod_index = self.stable_decayed_isotopes.index(prod)
-
-                    if prod in cpy_radio_iso:
-                        self.decay_to_radio[prod_index][targ_index] += rate_mod_2
-                    else:
-                        self.decay_to_stable[prod_index][targ_index] += rate_mod_2
-
-
-    ##############################################
-    #        Chose the unstable and stable       #
-    #       isotopes to follow based on the      #
-    #                 yield tables               #
-    ##############################################
-    def __choose_network(self, cpy_radio_iso, hist_isotopes, can_skip = True):
-
-        '''
-        This function populates the unstable and stable
-        isotopes based on the yield tables
-
-        '''
-
-        not_yet_followed = cpy_radio_iso[:]
-        skipped_elements = {}
-        while len(not_yet_followed) > 0:
-            # Get the target
-            targ = not_yet_followed.pop()
-
-            # Put the target in cpy_radio_iso
-            if targ in hist_isotopes:
-                if targ not in self.stable_decayed_isotopes:
-                    self.stable_decayed_isotopes.append(targ)
-                continue
-
-            elif targ not in cpy_radio_iso:
-                cpy_radio_iso.append(targ)
-
-            # Get its decay index
-            targ_index = self.all_isotopes_names.index(targ)
-
-            # Retrieve the number of reactions
-            n_reacts = self.inner.decay_module.iso.reactions[targ_index][1]
-
-            # Decay rate in 1/year
-            rate = self.inner.decay_module.iso.decay_constant[targ_index][0] * self.yr_to_sec
-            half_life = np.log(2) / rate
-
-            # Try to skip reaction if too short
-            skip_elem = False
-            if half_life < self.min_half_life and can_skip:
-                if targ not in self.inner.radio_iso:
-                    skip_elem = True
-
-            # For each reaction, store the products in not_yet_followed if they
-            # are not in cpy_radio_iso
-            for jj in range(n_reacts):
-                prod_list = []
-                react_indx = self.inner.decay_module.iso.reactions[targ_index][jj + 2] - 1
-                react_type = str(self.inner.decay_module.iso.reaction_types[react_indx])
-
-                # Apply the probability for this branch
-                rate_jj = rate * self.inner.decay_module.iso.decay_constant[targ_index][jj + 1]
-                half_life_jj = np.log(2) / rate_jj
-
-                # Try to skip reaction if too long
-                if half_life_jj > self.max_half_life and n_reacts > 1:
-                    s = "Reaction of type {}".format(react_type)
-                    s += "for element {} too slow. Skipping.".format(targ)
-                    print(s)
-                    continue
-
-                # Get the product index and name
-                prod_index = self.inner.decay_module.iso.product_isomer[targ_index][jj] - 1
-                if prod_index == targ_index and "SF" not in react_type:
-                    s = "Warning: {} decaying into itself! ".format(targ)
-                    s += "However, the module does not currently track "
-                    s += "an isomer of {}. Skipping decay.".format(targ)
-                    print(s)
-                    continue
-
-                prod_name = self.all_isotopes_names[prod_index]
-                prod_list.append(prod_name)
-
-                # Now get all side products
-                prod_list += self.decay_secondary[react_indx]
-
-                # Treat fissions
-                fiss_prods = []; fiss_rates = []
-                if "SF" in react_type:
-                    # Never skip a fission if we arrive here
-                    skip_elem = False
-
-                    fission_index = self.inner.decay_module.iso.reactions[targ_index][0]
-                    fiss_vect = self.inner.decay_module.iso.s_fission_vector[fission_index]
-                    for kk in range(len(self.all_isotopes_names)):
-                        if fiss_vect[kk] > 0:
-                            fiss_prods.append(self.all_isotopes_names[kk])
-                            fiss_rates.append(fiss_vect[kk])
-
-                # Store this reaction unless we are skipping it
-                if skip_elem:
-                    # Store the products and the probability of each channel
-                    if targ in skipped_elements:
-                        skipped_elements[targ].append([prod_list,\
-                                self.inner.decay_module.iso.decay_constant[targ_index][jj + 1]])
-                    else:
-                        skipped_elements[targ] = [[prod_list,\
-                                self.inner.decay_module.iso.decay_constant[targ_index][jj + 1]]]
-                else:
-                    # If the reaction is not skipped, just add it
-                    if len(fiss_prods) > 0:
-                        reac_list = []
-                        # If in a fission, just add every product as a new reaction
-                        for kk in range(len(fiss_prods)):
-                            reac_list.append(Reaction(targ,\
-                                    [fiss_prods[kk]], rate_jj*fiss_rates[kk]))
-                    else:
-                        reac_list = [Reaction(targ, prod_list, rate_jj)]
-
-                    if targ in self.reac_dictionary:
-                        self.reac_dictionary[targ] += reac_list
-                    else:
-                        self.reac_dictionary[targ] = reac_list
-
-                # Put products in the list!
-                for elem in prod_list + fiss_prods:
-                    if elem not in cpy_radio_iso and elem not in not_yet_followed:
-                        if elem not in self.stable_decayed_isotopes:
-                            not_yet_followed.append(elem)
-
-        # Deal with the skipped elements
-
-        # First, eliminate them from cpy_radio_iso
-        for elem in skipped_elements:
-            if elem in cpy_radio_iso:
-                cpy_radio_iso.remove(elem)
-
-        # Now substitute the skipped elements amongst themselves
-        for elem in skipped_elements:
-            for elem2 in skipped_elements:
-                if elem == elem2:
-                    continue
-
-                cpy_reacs = copy.deepcopy(skipped_elements[elem2])
-                for reac in cpy_reacs:
-                    if elem in reac[0]:
-
-                        # Store probability and other products
-                        prob = reac[1]
-                        other_prods = []
-                        for prod in reac[0]:
-                            if prod != elem:
-                                other_prods.append(prod)
-
-                        # Eliminate this reaction
-                        skipped_elements[elem2].remove(reac)
-
-                        # Now add all reactions for elem
-                        reacs = skipped_elements[elem]
-                        for reac2 in reacs:
-                            # Make a copy
-                            cpy = copy.deepcopy(reac2)
-
-                            # Modify this reaction
-                            cpy[0] += other_prods
-                            cpy[1] *= prob
-                            skipped_elements[elem2].append(cpy)
-
-        # Finally, remove the skipped elements from reactions
-        for elem in skipped_elements:
-            for targ in self.reac_dictionary:
-                cpy_reacs = copy.copy(self.reac_dictionary[targ])
-                for reac in cpy_reacs:
-                    if elem in reac.products:
-                        # Copy rate of reaction
-                        rate = reac.rate
-
-                        # Copy all other products
-                        keep_prods = []
-                        for prod in reac.products:
-                            if prod != elem:
-                                keep_prods.append(prod)
-
-                        # Eliminate reac
-                        self.reac_dictionary[targ].remove(reac)
-
-                        # Now add all the reactions of the skipped element
-                        for reac2 in skipped_elements[elem]:
-                            prod = reac2[0] + keep_prods
-                            this_rate = reac2[1] * rate
-                            reaction = Reaction(targ, prod, this_rate)
-                            self.reac_dictionary[targ].append(reaction)
-
-    ##############################################
     #              Start Simulation              #
     ##############################################
     def __start_simulation(self):
 
-        # Load decay network if it exists
-        self.__create_reac_dictionary()
+        alpha_instance = alpha.Alpha([self.inner], omega_p=self)
+        alpha_instance.integrate()
 
-        # Define the end of active period (depends on whether a galaxy merger occurs)
-        if self.t_merge > 0.0:
-            i_up_temp = self.inner.i_t_merger + 1
-        else:
-            i_up_temp = self.inner.nb_timesteps
-
-        # Reset the inflow and outflow rates to zero
-        self.inner.m_outflow_t = np.zeros(self.inner.nb_timesteps)
-        self.inner.m_inflow_t = np.zeros(self.inner.nb_timesteps)
-
-        # Create primordial arrays
-        primordial_init = np.array(copy.copy(self.inner.ymgal[0]))
-        primordial_outer_init = np.array(copy.copy(self.ymgal_outer[0]))
-
-        # Initialize depending on the number of sources
-        if not self.inner.pre_calculate_SSPs:
-
-            # Create a sources and mdots arrays
-            sources = [
-                       self.inner.ymgal_massive,
-                       self.inner.ymgal_agb,
-                       self.inner.ymgal_1a,
-                       self.inner.ymgal_nsm,
-                      ]
-            sources += [x for x in self.inner.ymgal_delayed_extra]
-            sources_outer = [
-                       self.ymgal_outer_massive,
-                       self.ymgal_outer_agb,
-                       self.ymgal_outer_1a,
-                       self.ymgal_outer_nsm,
-                      ]
-            sources_outer += [x for x in self.ymgal_outer_extra]
-            mdots = [
-                     self.inner.mdot_massive,
-                     self.inner.mdot_agb,
-                     self.inner.mdot_1a,
-                     self.inner.mdot_nsm,
-                    ]
-            mdots += [x for x in self.inner.mdot_delayed_extra]
-            if self.inner.len_decay_file > 0 or self.inner.use_decay_module:
-                sources_radio = [
-                                 self.inner.ymgal_massive_radio,
-                                 self.inner.ymgal_agb_radio,
-                                 self.inner.ymgal_1a_radio,
-                                 self.inner.ymgal_nsm_radio,
-                                ]
-                sources_radio += [x for x in self.inner.ymgal_delayed_extra_radio]
-                sources_outer_radio = [
-                           self.ymgal_outer_massive_radio,
-                           self.ymgal_outer_agb_radio,
-                           self.ymgal_outer_1a_radio,
-                           self.ymgal_outer_nsm_radio,
-                          ]
-                sources_outer_radio += [x for x in self.ymgal_outer_extra_radio]
-                mdots_radio = [
-                         self.inner.mdot_massive_radio,
-                         self.inner.mdot_agb_radio,
-                         self.inner.mdot_1a_radio,
-                         self.inner.mdot_nsm_radio,
-                        ]
-                mdots_radio += [x for x in self.inner.mdot_delayed_extra_radio]
-            else:
-                sources_radio = [[0.] for x in sources]
-                sources_outer_radio = [[0.] for x in sources_outer]
-                mdots_radio = [[0.] for x in mdots]
-
-        else:
-
-            # Create a sources and mdots arrays
-            sources = [self.inner.ymgal]
-            sources_outer = [self.ymgal_outer]
-            mdots = [self.inner.mdot]
-            if self.inner.len_decay_file > 0 or self.inner.use_decay_module:
-                sources_radio = [self.inner.ymgal_radio]
-                sources_outer_radio = [self.ymgal_outer_radio]
-                mdots_radio = [self.inner.mdot_radio]
-            else:
-                sources_radio = [[0.] for x in sources]
-                sources_outer_radio = [[0.] for x in sources_outer]
-                mdots_radio = [[0.] for x in mdots]
-
-        # For each timestep (defined by the OMEGA instance) ...
-        for i_step_OMEGA in range(0,i_up_temp):
-
-            # Get convenient dt
-            totDt = self.inner.history.timesteps[i_step_OMEGA]
-
-            # Do a mock-up run in order to run self.inner.run_step and update mdot
-
-            # Mock up start ---------
-
-            # Calculate the total current gas mass in the inner region
-            self.sum_inner_ymgal_cur = np.sum(self.inner.ymgal[i_step_OMEGA])
-
-            # Calculate the star formation rate [Msun/yr]
-            sfr_temp = self.__get_SFR(i_step_OMEGA, self.sum_inner_ymgal_cur)
-
-            # Calculate the galactic outflow rate [Msun/yr]
-            or_temp = self.__get_outflow_rate(i_step_OMEGA, sfr_temp)
-
-            # Calculate the galactic inflow rate [Msun/yr]
-            ir_iso_temp = self.__get_inflow_rate(i_step_OMEGA, \
-                np.sum(self.ymgal_outer[i_step_OMEGA]))
-
-            # Convert rates into total masses (except for SFR)
-            m_lost = or_temp * totDt
-            m_added = ir_iso_temp * totDt
-            sum_m_added = np.sum(m_added)
-            if self.f_halo_to_gal_out >= 0.0:
-                self.m_lost_for_halo = m_lost + 0.0
-
-            # Limit the inflow rate if needed (the outflow rate is considered in OMEGA)
-            if sum_m_added > np.sum(self.ymgal_outer[i_step_OMEGA]):
-                m_added = copy.copy(self.ymgal_outer[i_step_OMEGA])
-
-            # If the IMF must be sampled ...
-            m_stel_temp = sfr_temp * totDt
-            if self.inner.imf_rnd_sampling and self.inner.m_pop_max >= m_stel_temp:
-
-                # Get the sampled masses
-                mass_sampled = self.inner._get_mass_sampled(sfr_temp * totDt)
-
-            # No mass sampled if using the full IMF ...
-            else:
-                mass_sampled = np.array([])
-
-            # Evolve the inner region for one step.  The 'i_step_OMEGA + 1'
-            # is because OMEGA updates the quantities in the next
-            # upcoming timestep
-            self.inner.run_step(i_step_OMEGA + 1, sfr_temp, \
-                mass_sampled=mass_sampled, m_added=m_added, m_lost=m_lost, \
-                no_in_out=True)
-
-            # Mock up end ---------
-
-            # Copy initial values for safekeeping
-            mgal_init_split = [np.array(x[i_step_OMEGA]) for x in sources]
-            if self.inner.pre_calculate_SSPs:
-                mgal_init_split[0] = mgal_init_split[0] - primordial_init
-            mcgm_init_split = [np.array(x[i_step_OMEGA]) for x in sources_outer]
-            if self.inner.pre_calculate_SSPs:
-                mcgm_init_split[0] = mcgm_init_split[0] - primordial_outer_init
-            if self.inner.len_decay_file > 0 or self.inner.use_decay_module:
-                mgal_radio_init_split = [np.array(x[i_step_OMEGA]) for x in \
-                                                           sources_radio]
-                mcgm_radio_init_split = [np.array(x[i_step_OMEGA]) for x in \
-                                                           sources_outer_radio]
-            else:
-                mgal_radio_init_split = [[0.]]
-                mcgm_radio_init_split = [[0.]]
-
-            # Initialize
-            final_sfr = 0.;  total_m_added = 0.;  total_m_lost = 0.
-            HH = totDt; newHH = HH
-
-            while totDt > 0:
-                converged = True
-
-                # Run the patankar algorithm for the substeps
-                err = []
-                t_m_prim = []; t_m_gal = []; t_m_gal_radio = []
-                t_m_prim_out = []; t_m_cgm = []; t_m_cgm_radio = []
-                t_total_sfr = []; t_m_added = []; t_m_lost = []
-
-                for ii in range(len(self.substeps)):
-                    nn = self.substeps[ii]
-                    fnn = float(nn)
-                    htm = HH/fnn
-
-                    # Integrate
-                    values = self.__run_substeps(i_step_OMEGA, primordial_init,\
-                                 primordial_outer_init, mgal_init_split, mdots,\
-                                 mcgm_init_split, mgal_radio_init_split,\
-                                 mdots_radio, mcgm_radio_init_split, htm, nn)
-
-                    # Unpack
-                    m_prim, m_gal, m_gal_radio, m_prim_out, m_cgm, m_cgm_radio,\
-                        total_sfr, m_added, m_lost = values
-
-                    # Extrapolate according to Deuflhard 1983 but with some
-                    # modifications to account for different convergence speed
-                    t_m_prim.append([m_prim])
-                    t_m_gal.append([m_gal])
-                    t_m_gal_radio.append([m_gal_radio])
-                    t_m_prim_out.append([m_prim_out])
-                    t_m_cgm.append([m_cgm])
-                    t_m_cgm_radio.append([m_cgm_radio])
-                    t_total_sfr.append([total_sfr])
-                    t_m_added.append([m_added])
-                    t_m_lost.append([m_lost])
-
-                    # Generic extrapolation array:
-                    t_extrap = [t_m_prim, t_m_gal, t_m_gal_radio, t_m_prim_out,\
-                                t_m_cgm, t_m_cgm_radio, t_total_sfr, t_m_added,\
-                                t_m_lost]
-
-                    if ii > 0:
-                        for kk in range(len(t_m_gal) - 1):
-                            for tt in t_extrap:
-                                tt[-1].append(tt[-1][kk] + (tt[-1][kk] - tt[-2][kk])\
-                                    / ((fnn/self.substeps[ii - kk - 1]) - 1))
-
-                    # Calculate mean relative error
-                    if ii > 0:
-                        err.append(0)
-                        for tt in t_extrap:
-                            err[-1] += np.mean(np.abs(tt[-1][-2] - tt[-1][-1])\
-                                    / np.abs(tt[-1][-2] + self.min_val))
-
-                        if err[-1] < self.tolerance:
-                            break
-
-                # Take solution
-                if len(err) > 0:
-                    if err[-1] < self.tolerance:
-                        primordial_init = np.abs(t_m_prim[-1][-2])
-                        mgal_init_split = np.abs(t_m_gal[-1][-2])
-                        mgal_radio_init_split = np.abs(t_m_gal_radio[-1][-2])
-                        primordial_outer_init = np.abs(t_m_prim_out[-1][-2])
-                        mcgm_init_split = np.abs(t_m_cgm[-1][-2])
-                        mcgm_radio_init_split = np.abs(t_m_cgm_radio[-1][-2])
-                        final_sfr += np.abs(t_total_sfr[-1][-2])
-                        total_m_added += np.abs(t_m_added[-1][-2])
-                        total_m_lost += np.abs(t_m_lost[-1][-2])
-                        converged = True
-                    else:
-                        converged = False
-
-                    # Get the root error
-                    for ii in range(len(err)):
-                        err[ii] = (err[ii]/self.tolerance)**(1./(ii + 2))
-
-                    hhcoef = min(err)
-
-                    # Calculate newHH
-                    if hhcoef <= 0:
-                        newHH = totDt
-                    elif not converged:
-                        newHH = HH*0.1
-                    else:
-                        newHH = HH/hhcoef
-
-                # Update totDt and HH
-                if converged:
-                    totDt -= HH
-
-                HH = 2*newHH
-
-                # Check that HH remains below totDt
-                if totDt < HH*1.1:
-                    HH = totDt
-
-            # Keep the lost and added values in memory
-            self.inner.m_outflow_t[i_step_OMEGA] = total_m_lost
-            self.inner.m_inflow_t[i_step_OMEGA] = total_m_added
-
-            # Now that we are out of it, update final values
-            self.inner.ymgal[i_step_OMEGA + 1] += primordial_init
-            self.ymgal_outer[i_step_OMEGA + 1] += primordial_outer_init
-            for ii in range(len(sources)):
-                sources[ii][i_step_OMEGA + 1] += mgal_init_split[ii]
-                sources_outer[ii][i_step_OMEGA + 1] += mcgm_init_split[ii]
-                if not self.inner.pre_calculate_SSPs:
-                    self.inner.ymgal[i_step_OMEGA + 1] += mgal_init_split[ii]
-                    self.ymgal_outer[i_step_OMEGA + 1] += mcgm_init_split[ii]
-
-            # Update the final values for the radioisotopes
-            if self.inner.len_decay_file > 0 or self.inner.use_decay_module:
-                for ii in range(len(sources_radio)):
-                    sources_radio[ii][i_step_OMEGA + 1] += mgal_radio_init_split[ii]
-                    sources_outer_radio[ii][i_step_OMEGA + 1] += mcgm_radio_init_split[ii]
-                    if not self.inner.pre_calculate_SSPs:
-                        self.inner.ymgal_radio[i_step_OMEGA + 1] += mgal_radio_init_split[ii]
-                        self.ymgal_outer_radio[i_step_OMEGA + 1] += mcgm_radio_init_split[ii]
-
-            # Update original arrays
-            self.inner.history.sfr_abs[i_step_OMEGA] = final_sfr /\
-                    self.inner.history.timesteps[i_step_OMEGA]
-            self.inner.m_outflow_t[i_step_OMEGA] = total_m_lost
-            self.inner.m_locked = final_sfr
-
-            # Get the new metallicity of the gas and update history class
-            self.inner.zmetal = self.inner._getmetallicity(i_step_OMEGA)
-            self.inner._update_history(i_step_OMEGA)
-
-        # Evolve the stellar population only .. if a galaxy merger occured
-        if self.t_merge > 0.0:
-
-            for i_step_last in range(i_step_OMEGA + 1, self.inner.nb_timesteps):
-                self.inner.run_step(i_step_last + 1, 0.0, no_in_out=True)
-
-                # Update original arrays
-                self.inner.history.sfr_abs[i_step_OMEGA] = 0.0
-                self.inner.m_outflow_t[i_step_OMEGA] = 0.0
-                self.inner.m_locked = 0.0
-
-                # Get the new metallicity of the gas and update history class
-                self.inner.zmetal = self.inner._getmetallicity(i_step_OMEGA)
-                self.inner._update_history(i_step_OMEGA)
-
-        # FINAL TIMESTEP  .. TODO PUT THIS IN A FUNCTION
-
-        # Do the final update of the history class
-        self.inner._update_history_final()
-
-        # Add the evolution arrays to the history class
-        self.inner.history.m_tot_ISM_t = self.inner.m_tot_ISM_t
-        self.inner.history.eta_outflow_t = self.inner.eta_outflow_t
-
-        # If external control ...
-        if self.inner.external_control:
-            i_last = len(self.inner.ymgal) - 1
-            sfr_last = self.__get_SFR(i_last, sum(self.inner.ymgal[i_last]))
-            self.inner.history.sfr_abs[i_last] = sfr_last
-
-        # Calculate the total mass of gas
-        self.inner.m_stel_tot = 0.0
-        for i_tot in range(0,len(self.inner.history.timesteps)):
-            self.inner.m_stel_tot += self.inner.history.sfr_abs[i_tot] * \
-                self.inner.history.timesteps[i_tot]
-        if self.inner.m_stel_tot > 0.0:
-            self.inner.m_stel_tot = 1.0 / self.inner.m_stel_tot
-        self.inner.f_m_stel_tot = []
-        m_temp = 0.0
-        for i_tot in range(0,len(self.inner.history.timesteps)):
-            m_temp += self.inner.history.sfr_abs[i_tot] * \
-                self.inner.history.timesteps[i_tot]
-            self.inner.f_m_stel_tot.append(m_temp*self.inner.m_stel_tot)
-        self.inner.f_m_stel_tot.append(self.inner.f_m_stel_tot[-1])
+        # TODO One omega run
+        alpha_instance.one_instance_error()
 
         # Announce the end of the simulation
         print ('   OMEGA run completed -',self.inner._gettime())
 
 
     ##############################################
-    #        Run substeps for patankar           #
+    #    Get the production and destruction      #
+    #            for this substep                #
     ##############################################
-    def __run_substeps(self, i_step_OMEGA, primordial_init,\
-                             primordial_outer_init, mgal_init_split, mdots,\
-                             mcgm_init_split, mgal_radio_init_split,\
-                             mdots_radio, mcgm_radio_init_split, htm, nn):
+    def get_p_and_d(self, i_step_OMEGA, isot_prim, isot_prim_out, isot_mgal,
+                          yield_rate, isot_mcgm,isot_mgal_radio,
+                          yield_rate_radio, isot_mcgm_radio, htm, dtt, nn,
+                          decay_from_radio, decay_to_radio, decay_to_stable,
+                          stable_decayed_isotopes):
 
         '''
         This function runs the patankar algorithm for nn substeps.
 
         '''
 
-        # Store initial values
-        isot_prim = np.array(copy.copy(primordial_init))
-        isot_prim_out = np.array(copy.copy(primordial_outer_init))
-        isot_mgal = np.array(copy.deepcopy(mgal_init_split))
-        isot_mcgm = np.array(copy.deepcopy(mcgm_init_split))
-        isot_mgal_radio = np.array(copy.deepcopy(mgal_radio_init_split))
-        isot_mcgm_radio = np.array(copy.deepcopy(mcgm_radio_init_split))
+        # Calculate the total current gas mass in the inner region
+        current_mgal = np.sum(isot_prim) + np.sum(isot_mgal)
+        inv_mass = 1 / (current_mgal + self.min_val)
 
-        # Initialize to zero the analysis quantities
-        total_sfr = 0.;  m_added = 0.;  m_lost = 0.
+        # Calculate the total current gas mass in the outer region
+        current_mcgm = np.sum(isot_prim_out) + np.sum(isot_mcgm)
+        inv_mass_cgm = 1 / (current_mcgm + self.min_val)
 
-        # Introduce the yields for all isotopes
-        yield_rate = np.array([x[i_step_OMEGA] / (htm * nn) for x in mdots])
+        # Calculate the star formation rate [Msun/yr]
+        sfr_temp = self.__get_SFR(i_step_OMEGA, current_mgal, dtt)
+        isot_sfr_prim = sfr_temp * isot_prim * inv_mass
+        isot_sfr_split = sfr_temp * isot_mgal * inv_mass
+        isot_sfr_split_radio = sfr_temp * isot_mgal_radio * inv_mass
+
+        # Calculate the galactic outflow rate [Msun/yr]
+        or_temp = self.__get_outflow_rate(i_step_OMEGA, sfr_temp, dtt)
+        isot_or_prim = or_temp * isot_prim * inv_mass
+        isot_or_split = or_temp * isot_mgal * inv_mass
+        isot_or_split_radio = or_temp * isot_mgal_radio * inv_mass
+
+        # Calculate the galactic inflow rate [Msun/yr]
+        ir_iso_temp = self.__get_inflow_rate(i_step_OMEGA, current_mcgm, dtt)
+        ir_iso_prim = ir_iso_temp * isot_prim_out * inv_mass_cgm
+        ir_iso_split = ir_iso_temp * isot_mcgm * inv_mass_cgm
+        ir_iso_split_radio = ir_iso_temp * isot_mcgm_radio * inv_mass_cgm
+
+        # Modify inner gas:
+        # Get production factors for primordial and split, stable and radio
+        pp_prim = ir_iso_prim
+        pp_split = ir_iso_split + yield_rate
+        pp_split_radio = ir_iso_split_radio + yield_rate_radio
+
+        # Get destruction factors for primordial and split, stable and radio
+        dd_prim = (isot_or_prim + isot_sfr_prim) / (isot_prim + self.min_val)
+        dd_split = (isot_or_split + isot_sfr_split) / (isot_mgal + self.min_val)
+        dd_split_radio = (isot_or_split_radio + isot_sfr_split_radio)\
+                       / (isot_mgal_radio + self.min_val)
+
+        # Modify pp_split, pp_split_radio, and dd_split_radio due to decays
         if self.inner.len_decay_file > 0 or self.inner.use_decay_module:
-            yield_rate_radio = [x[i_step_OMEGA] / (htm * nn) for x in mdots_radio]
+            pp_split, pp_split_radio, dd_split_radio = \
+                self.__get_radio_pp_dd(pp_split, pp_split_radio,
+                     dd_split_radio, isot_mgal_radio, decay_from_radio,
+                     decay_to_radio, decay_to_stable, stable_decayed_isotopes)
 
-            # Increase the size of the array if needed
-            diff = self.inner.nb_radio_iso - len(yield_rate_radio[0])
-            for ii in range(len(yield_rate_radio)):
-                yield_rate_radio[ii] = list(yield_rate_radio[ii]) + [0.]*diff
-        else:
-            yield_rate_radio = [0. for x in mdots_radio]
+        # Get rates for intergalactic to circumgalactic flows
+        added_cgm, removed_cgm = self.__get_rates_for_DM_variation(i_step_OMEGA,\
+                                      current_mcgm, dtt)
+        m_out_cgm = self.__get_halo_outflow_rate(i_step_OMEGA, dtt, sfr_temp)
+        isot_added_cgm = added_cgm * self.prim_x_frac
+        isot_removed_cgm_prim = removed_cgm * isot_prim_out * inv_mass_cgm
+        isot_removed_cgm_split = removed_cgm * isot_mcgm * inv_mass_cgm
+        isot_removed_cgm_split_radio = removed_cgm * isot_mcgm_radio * inv_mass_cgm
+        isot_m_out_cgm_prim = m_out_cgm * isot_prim_out * inv_mass_cgm
+        isot_m_out_cgm_split = m_out_cgm * isot_mcgm * inv_mass_cgm
+        isot_m_out_cgm_split_radio = m_out_cgm * isot_mcgm_radio * inv_mass_cgm
 
-        yield_rate_radio = np.array(yield_rate_radio)
+        # Get production factors for ymgal_outer and ymgal_outer_radio
+        pp_prim_out = isot_or_prim + isot_added_cgm
+        pp_split_out = isot_or_split
+        pp_split_radio_out = isot_or_split_radio
 
-        for ii in range(nn):
-            # Calculate dtt
-            dtt = ii*htm
+        # Get destruction factors for ymgal_outer and ymgal_outer_radio
+        dd_prim_out = (ir_iso_prim + isot_removed_cgm_prim +
+            isot_m_out_cgm_prim) / (isot_prim_out + self.min_val)
+        dd_split_out = (ir_iso_split + isot_removed_cgm_split +
+            isot_m_out_cgm_split) / (isot_mcgm + self.min_val)
+        dd_split_radio_out = (ir_iso_split_radio + isot_removed_cgm_split_radio
+            + isot_m_out_cgm_split_radio) / (isot_mcgm_radio + self.min_val)
 
-            # Calculate the total current gas mass in the inner region
-            current_mgal = np.sum(isot_prim) + np.sum(isot_mgal)
-            inv_mass = 1 / (current_mgal + self.min_val)
+        # Modify pp_split_out, pp_split_radio_out, and dd_split_radio_out
+        # due to decays
+        if self.inner.len_decay_file > 0 or self.inner.use_decay_module:
+            pp_split_out, pp_split_radio_out, dd_split_radio_out =\
+                self.__get_radio_pp_dd(pp_split_out, pp_split_radio_out,
+                     dd_split_radio_out, isot_mcgm_radio, decay_from_radio,
+                     decay_to_radio, decay_to_stable, stable_decayed_isotopes)
 
-            # Calculate the total current gas mass in the outer region
-            current_mcgm = np.sum(isot_prim_out) + np.sum(isot_mcgm)
-            inv_mass_cgm = 1 / (current_mcgm + self.min_val)
-
-            # Calculate the star formation rate [Msun/yr]
-            sfr_temp = self.__get_SFR(i_step_OMEGA, current_mgal, dtt)
-            isot_sfr_prim = sfr_temp * isot_prim * inv_mass
-            isot_sfr_split = sfr_temp * isot_mgal * inv_mass
-            isot_sfr_split_radio = sfr_temp * isot_mgal_radio * inv_mass
-            total_sfr += sfr_temp * htm
-
-            # Calculate the galactic outflow rate [Msun/yr]
-            or_temp = self.__get_outflow_rate(i_step_OMEGA, sfr_temp, dtt)
-            isot_or_prim = or_temp * isot_prim * inv_mass
-            isot_or_split = or_temp * isot_mgal * inv_mass
-            isot_or_split_radio = or_temp * isot_mgal_radio * inv_mass
-            m_lost += or_temp * htm
-
-            # Calculate the galactic inflow rate [Msun/yr]
-            ir_iso_temp = self.__get_inflow_rate(i_step_OMEGA, current_mcgm, dtt)
-            ir_iso_prim = ir_iso_temp * isot_prim_out * inv_mass_cgm
-            ir_iso_split = ir_iso_temp * isot_mcgm * inv_mass_cgm
-            ir_iso_split_radio = ir_iso_temp * isot_mcgm_radio * inv_mass_cgm
-            m_added += ir_iso_temp * htm
-
-            # Modify inner gas:
-            # Get production factors for primordial and split, stable and radio
-            pp_prim = ir_iso_prim
-            pp_split = ir_iso_split + yield_rate
-            pp_split_radio = ir_iso_split_radio + yield_rate_radio
-
-            # Get destruction factors for primordial and split, stable and radio
-            dd_prim = (isot_or_prim + isot_sfr_prim) / (isot_prim + self.min_val)
-            dd_split = (isot_or_split + isot_sfr_split) / (isot_mgal + self.min_val)
-            dd_split_radio = (isot_or_split_radio + isot_sfr_split_radio)\
-                    / (isot_mgal_radio + self.min_val)
-
-            # Modify pp_split, pp_split_radio, and dd_split_radio due to decays
-            if self.inner.len_decay_file > 0 or self.inner.use_decay_module:
-                pp_split, pp_split_radio, dd_split_radio =\
-                    self.__get_radio_pp_dd(pp_split, pp_split_radio,\
-                    dd_split_radio, isot_mgal_radio)
-
-            # Update the inner gas components
-            isot_prim = (isot_prim + pp_prim * htm) / (1 + dd_prim * htm)
-            isot_mgal = (isot_mgal + pp_split * htm) / (1 + dd_split * htm)
-            isot_mgal_radio = (isot_mgal_radio + pp_split_radio * htm)\
-                    / (1 + dd_split_radio * htm)
-
-            # Get rates for intergalactic to circumgalactic flows
-            added_cgm, removed_cgm = self.__get_rates_for_DM_variation(i_step_OMEGA,\
-                    current_mcgm, dtt)
-            m_out_cgm = self.__get_halo_outflow_rate(i_step_OMEGA, dtt, sfr_temp)
-            isot_added_cgm = added_cgm * self.prim_x_frac
-            isot_removed_cgm_prim = removed_cgm * isot_prim_out * inv_mass_cgm
-            isot_removed_cgm_split = removed_cgm * isot_mcgm * inv_mass_cgm
-            isot_removed_cgm_split_radio = removed_cgm * isot_mcgm_radio * inv_mass_cgm
-            isot_m_out_cgm_prim = m_out_cgm * isot_prim_out * inv_mass_cgm
-            isot_m_out_cgm_split = m_out_cgm * isot_mcgm * inv_mass_cgm
-            isot_m_out_cgm_split_radio = m_out_cgm * isot_mcgm_radio * inv_mass_cgm
-
-            # Get production factors for ymgal_outer and ymgal_outer_radio
-            pp_prim = isot_or_prim + isot_added_cgm
-            pp_split = isot_or_split
-            pp_split_radio = isot_or_split_radio
-
-            # Get destruction factors for ymgal_outer and ymgal_outer_radio
-            dd_prim = (ir_iso_prim + isot_removed_cgm_prim + \
-                isot_m_out_cgm_prim) / (isot_prim_out + self.min_val)
-            dd_split = (ir_iso_split + isot_removed_cgm_split +\
-                isot_m_out_cgm_split) / (isot_mcgm + self.min_val)
-            dd_split_radio = (ir_iso_split_radio + isot_removed_cgm_split_radio\
-                + isot_m_out_cgm_split_radio) / (isot_mcgm_radio + self.min_val)
-
-            # Modify pp_split, pp_split_radio, and dd_split_radio due to decays
-            if self.inner.len_decay_file > 0 or self.inner.use_decay_module:
-                pp_split, pp_split_radio, dd_split_radio =\
-                    self.__get_radio_pp_dd(pp_split, pp_split_radio,\
-                    dd_split_radio, isot_mcgm_radio)
-
-            # Get new ymgal_outer and ymgal_outer_radio
-            isot_prim_out = (isot_prim_out + pp_prim * htm) / (1 + dd_prim * htm)
-            isot_mcgm = (isot_mcgm + pp_split * htm) / (1 + dd_split * htm)
-            isot_mcgm_radio = (isot_mcgm_radio + pp_split_radio * htm)\
-                    / (1 + dd_split_radio * htm)
+        # Increments (changes)
+        values = (
+                  (pp_prim, dd_prim),                       # Primordial gas
+                  (pp_split, dd_split),                     # ymgal
+                  (pp_split_radio, dd_split_radio),         # ymgal_radio
+                  (pp_prim_out, dd_prim_out),               # CGM primordial gas
+                  (pp_split_out, dd_split_out),             # ymgal_outer
+                  (pp_split_radio_out, dd_split_radio_out), # ymgal_outer_radio
+                  (sfr_temp, sfr_temp * 0),                 # total_sfr
+                  (ir_iso_temp, ir_iso_temp * 0),           # m_added
+                  (or_temp, or_temp * 0),                   # m_lost
+                 )
 
         # Return the values
-        return  isot_prim, isot_mgal, isot_mgal_radio, isot_prim_out, isot_mcgm,\
-                isot_mcgm_radio, total_sfr, m_added, m_lost
+        return values
 
     ##############################################
     #           Get pp, dd from reactions        #
     ##############################################
-    def __get_radio_pp_dd(self, pp, pp_radio, dd_radio, isot_mass_radio):
+    def __get_radio_pp_dd(self, pp, pp_radio, dd_radio, isot_mass_radio,
+                          decay_from_radio, decay_to_radio, decay_to_stable,
+                          stable_decayed_isotopes):
 
         '''
         This function updates pp, pp_radio and dd_radio due
@@ -1469,22 +730,20 @@ class omega_plus():
         '''
 
         # Simply add the values
-        dd_radio += self.decay_from_radio
+        dd_radio += decay_from_radio
 
         # For radioactive isotopes
         pp_radio_t = np.transpose(pp_radio)
         for ii in range(self.inner.nb_radio_iso):
-            pp_radio_t[ii] += np.sum(self.decay_to_radio[ii] * isot_mass_radio,\
-                                   axis = 1)
+            pp_radio_t[ii] += np.sum(decay_to_radio[ii] * isot_mass_radio, axis=1)
         pp_radio = np.transpose(pp_radio_t)
 
         # For stable isotopes
         pp = np.transpose(pp)
-        for ii in range(len(self.stable_decayed_isotopes)):
-            isot = self.stable_decayed_isotopes[ii]
+        for ii in range(len(stable_decayed_isotopes)):
+            isot = stable_decayed_isotopes[ii]
             indx = self.inner.history.isotopes.index(isot)
-            pp[indx] += np.sum(self.decay_to_stable[ii] * isot_mass_radio,\
-                                axis = 1)
+            pp[indx] += np.sum(decay_to_stable[ii] * isot_mass_radio, axis=1)
         pp = np.transpose(pp)
 
         return pp, pp_radio, dd_radio
@@ -2093,46 +1352,3 @@ class omega_plus():
         out = 'Run time: ' + \
         str(round((t_module.time() - self.start_time),2))+"s"
         return out
-
-
-##############################################
-#               Reaction CLASS               #
-##############################################
-class Reaction():
-
-    '''
-    Class for reactions
-
-    '''
-
-    #############################
-    #        Constructor        #
-    #############################
-    def __init__(self, target, products, rate):
-
-        '''
-        Initialize the reaction. It takes a target, a single
-        product or a list of products and a rate.
-
-        '''
-
-        self.target = target
-        self.products = products if type(products) is list else [products]
-        self.rate = rate
-
-
-    #############################
-    #      __str__ method       #
-    #############################
-    def __str__(self):
-
-        '''
-        __str__ method for the class, for when using "print"
-
-        '''
-        s = "{} -> {}".format(self.target, self.products[0])
-        for prod in self.products[1:]:
-            s += " + {}".format(prod)
-        s += "; rate = {} 1/y".format(self.rate)
-
-        return s
