@@ -1147,7 +1147,13 @@ def make_zones(mass, start_radius , end_radius, n_zones, kwargs_list=[{}]):
         centre = (rout + rin) * 0.5
 
         # Put the bin properties in the gal_bin list
-        gal_bin = [i, rin, rout, centre, zone_mass]
+        gal_bin = {
+                   "index": i,
+                   "rin": rin,
+                   "rout": rout,
+                   "centre": centre,
+                   "zone_mass": zone_mass
+                   }
         bins.append(gal_bin)
 
     # Version number
@@ -1163,12 +1169,14 @@ def make_zones(mass, start_radius , end_radius, n_zones, kwargs_list=[{}]):
         if len(kwargs_list) <= 1:
             # Make an omega for each zone, all with the same kwargs
             omegas[ver] = omega.omega(external_control=True,
-                                      in_out_control=True, mgal=bins[i][4],
+                                      in_out_control=True,
+                                      mgal=bins[i]["zone_mass"],
                                       **kwargs_list[0])
         if len(kwargs_list) > 1:
             # Custom kwargs for each zone
             omegas[ver] = omega.omega(external_control=True,
-                                      in_out_control=True, mgal=bins[i][4],
+                                      in_out_control=True,
+                                      mgal=bins[i]["zone_mass"],
                                       **kwargs_list[i])
 
     return vers, omegas, bins
@@ -1231,10 +1239,12 @@ def get_area(index, bins):
 
     """
 
-    if index == 0:
-        Ar = np.pi * (bins[index][2]) ** 2
-    else:
-        Ar = (np.pi * bins[index][2] ** 2) - (np.pi * bins[index-1][2] ** 2)
+    # Integrate area from centre
+    Ar = np.pi * bins[index]["rout"] ** 2
+
+    # Remove inner areas if we are not in central bin
+    if index > 0:
+        Ar -= np.pi * bins[index]["rin"] ** 2
 
     return Ar
 
@@ -1280,7 +1290,7 @@ def inflows(i_t, index, bin_radius, omega_zone, minf, bins, a=-1.267, b=1.033):
     # kpc from Palla et al (which was from Spitoni, Gioanna and Matteucci 2017)
     h = 3.5
 
-    # Define the function to integrate here
+    # Define the function to integrate here (Chiappini 2001)
     def normalisation_integral(r):
 
         result = 2 * np.pi * r
@@ -1289,8 +1299,9 @@ def inflows(i_t, index, bin_radius, omega_zone, minf, bins, a=-1.267, b=1.033):
 
         return result
 
-    # TODO What is "Chiappini 2001"? Is it the specific choice of a and b?
-    A = minf / integrate.quad(normalisation_integral, bins[0][1], bins[-1][2])[0]
+    # Integrate in radius
+    A = minf / integrate.quad(normalisation_integral, bins[0]["rin"],
+                              bins[-1]["rout"])[0]
 
     # TODO Is this in Gyr?
     tau = a + b * bin_radius
@@ -1428,7 +1439,7 @@ def migration(index, vers, omegas, bins, fstar, i_t, coeff, minf, mass_loading,
         sfr = (fstar * mass_sum / get_area(index, bins)) ** KS_pow
 
     # Calculate the gas gained and lost
-    gas_gained = inflows(i_t, index, bins[index][3], omegas[vers[index]], minf,
+    gas_gained = inflows(i_t, index, bins[index]["centre"], omegas[vers[index]], minf,
                          bins, a, b)[1]
     gas_lost = outflows(mass_loading, sfr, omegas[vers[index]], i_t, index,
                         bins)[0]
@@ -1551,7 +1562,7 @@ def get_radii(bins):
 
     """
 
-    radii = [x[3] for x in bins]
+    radii = [x["centre"] for x in bins]
 
     return radii
 
@@ -1610,7 +1621,8 @@ def get_radial_mass(vers, omegas, bins, i_t):
 
     """
 
-    radial_masses = [np.sum(omegas[key].ymgal[i_t]) for key in omegas]
+    radial_masses = [np.sum(omegas[vers[i]].ymgal[i_t])
+                     for i in range(len(omegas))]
 
     return radial_masses
 
@@ -1624,10 +1636,10 @@ def get_radial_surface_mass(vers, omegas, bins, i_t):
     """
 
     rad_surface_mass = []
+    rad_mass_sum = get_radial_mass(vers, omegas, bins, i_t)
 
     for i in range(len(omegas)):
-        mass_sum = np.sum(omegas[vers[i]].ymgal[i_t])
-        surf_mass = mass_sum / get_area(i, bins)
+        surf_mass = rad_mass_sum[i] / get_area(i, bins)
         rad_surface_mass.append(surf_mass)
 
     return rad_surface_mass
@@ -1675,7 +1687,7 @@ def plot_inflow_rate(vers, omegas, bins, i_t, minf, a=-1.267, b=1.033):
     """
 
     ylabel = 'Inflow Rate (M$_{\odot}$yr$^{-1}$kpc$^{-2}$)'
-    in_rate = [inflows(i_t, i, x[0][3], omegas[x[1]], minf, bins, a, b)[2] for
+    in_rate = [inflows(i_t, i, x[0]["centre"], omegas[x[1]], minf, bins, a, b)[2] for
                i, x in enumerate(zip(bins, omegas))]
 
     plot_vs_radius(in_rate, ylabel, omegas, bins, i_t)
@@ -1741,31 +1753,94 @@ def get_exp_scale_length(vers, omegas, bins):
 
     """
 
-    # Gas surface density as a function of radius for the final timestep
-    sm_final = get_radial_surface_mass(vers, omegas, bins, -1)
-    sm_0 = sm_final[0]
+    # Gas mass as a function of radius for the final timestep
+    radial_mass_final = np.array(get_radial_mass(vers, omegas, bins, -1))
 
+    # Assuming that the surface density rho goes as
+    # rho = rho0 * exp(-r / h)
+    # then the mass between ri and rj is given by:
+    # mij = 2 * pi * h * rho0 * ((h + ri) * exp(-ri / h) - (h + rj) * exp(-rj / h))
+    # So we can extract h by dividing consecutive masses and solving with NR
 
-    # TODO
-    # Where sm_final / sm_0 = e^-1
-    # Because sm_final = sm_0 * exp(-r / hscale)
-    # So if r = hscale => sm_final(hscale) = sm_0 / e
+    # Define the mass function and derivative
+    def mass_func(r1, r2, h, rho0=1):
+        '''
+        Mass function assuming that surface density rho goes as
+        rho = rho0 * exp(-r / h)
 
-    # Example
-    # If we say that sm_final(r) = sm_0 * exp(-r / hscale(r))
-    # Then ln(sm_final(r) / sm_0) = -r / hscale
-    # Then hscale_i = -r_i / ln(sm_final(r_i) / sm_0)
-    radii = np.array(get_radii(bins))
-    sm_final = np.array(sm_final)
+        If rho0 is not given, is assumed to be 1
+        '''
 
-    # Calculate hscale as the ratio of two densities
-    # So h = (ri - rj) / ln(rho_j / rho_i)
-    h_rat = (radii[:-1] - radii[1:]) / np.log(sm_final[1:] / sm_final[:-1])
-    if np.max(np.abs(h_rat - np.mean(h_rat))) > 1e-2:
-        print(h_rat)
+        mass = (h + r1) * np.exp(-r1 / h) - (h + r2) * np.exp(-r2 / h)
+        mass *= 2 * np.pi * h * rho0
+
+        return mass
+
+    def mass_deriv(r1, r2, h, rho0=1):
+        '''
+        Derivative of the mass function with h
+
+        If rho0 is not given, is assumed to be 1
+        '''
+
+        # Derivative of parenthesis
+        mass_der = (1 + r1 / h ** 2 * (h + r1)) * np.exp(-r1 / h)
+        mass_der -= (1 + r2 / h ** 2 * (h + r2)) * np.exp(-r2 / h)
+        mass_der *= 2 * np.pi * h * rho0
+
+        # Derivative of factor before parenthesis
+        mass_der += mass_func(r1, r2, h, rho0=rho0) / h
+
+        return mass_der
+
+    def find_hscale_for_masses(mass1, mass2, bin1, bin2):
+        '''
+        Newton rhapson to find the hscale between mass1 and mass2
+        '''
+
+        ratio = mass1 / mass2
+        h0 = 1
+        dif = None
+
+        # Do the newton-rhapson step
+        while dif is None or dif > 1e-3:
+
+            r1 = bin1["rin"]
+            r2 = bin1["rout"]
+            r3 = bin2["rin"]
+            r4 = bin2["rout"]
+
+            ratio_fun = mass_func(r1, r2, h0) / mass_func(r3, r4, h0) - ratio
+            ratio_der = mass_deriv(r1, r2, h0) * mass_func(r3, r4, h0)
+            ratio_der -= mass_func(r1, r2, h0) * mass_deriv(r3, r4, h0)
+            ratio_der /= mass_func(r3, r4, h0) ** 2
+
+            hnew = h0 - ratio_fun / ratio_der
+
+            dif = np.abs(h0 - hnew)
+            h0 = hnew
+
+        return h0
+
+    exp_scale_length = []
+    for i in range(len(radial_mass_final) - 1):
+        mass1 = radial_mass_final[i]
+        mass2 = radial_mass_final[i + 1]
+        bin1 = bins[i]
+        bin2 = bins[i + 1]
+
+        if i == 0:
+            bin1["rin"] = 0
+
+        hscale = find_hscale_for_masses(mass1, mass2, bin1, bin2)
+        exp_scale_length.append(hscale)
+    exp_scale_length = np.array(exp_scale_length)
+
+    if np.max(np.abs(exp_scale_length - np.mean(exp_scale_length))) > 1e-2:
+        print(exp_scale_length)
         sys.exit("The h-scale is not constant!")
 
-    return exp_scale_length
+    return exp_scale_length[0]
 
 def radial_plot_spectro(vers, omegas, bins, i_t, yaxis='[Fe/H]',
                         return_x_y=False):
