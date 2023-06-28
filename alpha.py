@@ -1366,7 +1366,11 @@ def outflows(mass_loading, sfr, omega_zone, i_t, index, bins):
     # Composition of the gas going out
     # TODO why is the outflow composition primordial?
     # TODO change for zone composition
-    ym_out = omega_zone.prim_comp.get(quantity='Yields', Z=0.0) * m_gas_out
+    #fraction of the zone that is the outflowing gas
+    frac_out = m_gas_out/sum(omega_zone.ymgal[i_t])
+    
+    #calculating the chemical composition of that fraction
+    ym_out = omega_zone.ymgal[i_t] * frac_out
 
     # Return the mass of gas, the chemical composition and outflow rate
     return m_gas_out, ym_out, out_rate
@@ -1449,12 +1453,18 @@ def migration(index, vers, omegas, bins, fstar, i_t, coeff, minf, mass_loading,
     # If we are everywhere but the outermost zone
     # then correct by adding the inflow from the outer zone
     if index < len(vers) - 1:
+        radial_gained = coeff * omegas[vers[index + 1]].ymgal[i_t]
         gas_gained += coeff * omegas[vers[index + 1]].ymgal[i_t]
+    else:
+        radial_gained = 0
 
     # If we are everywhere but the innermost zone
     # then correct by adding the outflow to the inner zone
     if index > 0:
+        radial_lost = np.sum(coeff * omegas[vers[index]].ymgal[i_t])
         gas_lost += np.sum(coeff * omegas[vers[index]].ymgal[i_t])
+    else:
+        radial_lost = 0
 
     # Star formation rate, gas lost and gas gained for this zone
     return sfr, gas_lost, gas_gained
