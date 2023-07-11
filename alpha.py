@@ -1098,6 +1098,59 @@ class Reaction():
 
 ##### INTRODUCED BY KATE ######
 
+def get_value_from_arr(y_arr, x_arr=None, xval=None, i_x=None):
+
+    """
+
+    Grab the value of y_arr indexed in x_arr for either
+    i_t or current_time
+
+    input parameters:
+    =================
+
+    y_arr: n,m-sized array or list of floats
+    value array
+
+    x_arr: n-sized array or list of floats
+    indexing array, must be specified if xval is
+
+    xval: float
+    value for interpolation if i_x is None.
+    NOTE: If provided, given priority
+
+    i_x: int
+    integer index to be used if xval is None
+
+    returns: m-sized array
+    estimated value of y_arr in x_val
+
+    """
+
+    # Interpolated return (priority)
+    if xval is not None:
+        if x_val is None:
+            s = "In get_value_from_arr, if x-value given,"
+            s += " an x_arr must be specified"
+            sys.exit(s)
+
+        # pass values to log
+        xlog = np.log(np.array(x_arr) + 1e-30)
+        ylog = np.log(np.array(y_arr) + 1e-30)
+
+        # interpolate
+        f_interp = scipy.interpolate.interp1d(xlog, ylog, assume_sorted=true)
+        y_val = np.exp(f_interp(x_val))
+
+        return yval
+
+    # Now the simple return
+    if i_x is not None:
+        return y_arr[i_x]
+
+    if xval is None:
+        s = "In get_value_from_arr, must specify either x-index or x-value"
+        sys.exit(s)
+
 def make_zones(mass, start_radius , end_radius, n_zones, kwargs_list=[{}]):
 
     """
@@ -1248,13 +1301,14 @@ def get_area(index, bins):
 
     return Ar
 
-def inflows(i_t, index, bin_radius, omega_zone, minf, bins, a=-1.267, b=1.033):
+def inflows(i_t, index, bin_radius, omega_zone, minf, bins, a=-1.267, b=1.033,
+            get_rates=False, current_time=None):
 
     """
 
-    Calculate the gas infall onto each zone. Returns mass of the infalling gas [Msun kcp-2],
-    chemical composision of the infalling gas in [Msun kpc-2] for each isotope and the inflow rate of the gas
-    [Mo yr-1 kpc-2]
+    Calculate the gas infall onto each zone. Returns mass of the infalling
+    gas [Msun kcp-2], chemical composision of the infalling gas in [Msun kpc-2]
+    for each isotope and the inflow rate of the gas [Mo yr-1 kpc-2]
 
     Input Parameters:
     =================
@@ -1285,6 +1339,13 @@ def inflows(i_t, index, bin_radius, omega_zone, minf, bins, a=-1.267, b=1.033):
     Gradient of the infall timescale [Gyr kpc-1]
     Default: b = 1.033
 
+    get_rates: bool
+    Get rates instead of total quantities for the integration
+    Default: False
+
+    current_time: float, range [age[i_t], age[i_t + 1]]
+    If provided, interpolate into current_time
+
     """
 
     # kpc from Palla et al (which was from Spitoni, Gioanna and Matteucci 2017)
@@ -1295,7 +1356,7 @@ def inflows(i_t, index, bin_radius, omega_zone, minf, bins, a=-1.267, b=1.033):
 
         result = 2 * np.pi * r
         result *= fr(r, h)
-        result *= ft(r, omega_zone.history.tend / 1e9, a, b)
+        result *= ft(r, omega_zone.history.tend * 1e-9, a, b)
 
         return result
 
@@ -1303,34 +1364,42 @@ def inflows(i_t, index, bin_radius, omega_zone, minf, bins, a=-1.267, b=1.033):
     A = minf / integrate.quad(normalisation_integral, bins[0]["rin"],
                               bins[-1]["rout"])[0]
 
-    # TODO Is this in Gyr?
+    # In Gyr
     tau = a + b * bin_radius
 
-    # TODO what is this? Msun / (Gyr * kpc ** 2)
+    # Msun / (Gyr * kpc ** 2)
     i0 = A * np.exp(-bin_radius / h)
 
-    # Age of the galaxy in Gyr
-    age = omega_zone.history.age[i_t] / 1e9
+    # Current time in Gyr
+    if current_time is None:
+        age = omega_zone.history.age[i_t]
+    else:
+        age = current_time
 
     # Infall rate in Msun / (yr * kpc ** 2)
-    inf_rate = i0 * np.exp(-age / tau) / 1e9
+    inf_density_rate = i0 * np.exp(-age * 1e-9 / tau) * 1e-9
 
     # Get the dt
     if i_t < len(omega_zone.history.age) - 1:
-        dt = omega_zone.history.age[i_t + 1] - omega_zone.history.age[i_t]
+        dt = omega_zone.history.age[i_t + 1] - age
     else:
         dt = 0
 
-    # Mass of gas infalling in Msun
-    m_gas_inf = inf_rate * dt * get_area(index, bins)
+    # Mass rate of gas infalling in Msun
+    m_gas_inf_rate = inf_density_rate * get_area(index, bins)
 
     # Chemical composition of infalling gas
-    ym_inf = omega_zone.prim_comp.get(quantity='Yields', Z=0.0) * m_gas_inf
+    ym_inf_rate = omega_zone.prim_comp.get(quantity='Yields', Z=0.0)
+    ym_inf_rate *= m_gas_inf_rate
 
     # Return the mass of gas, the chemical composition and inflow rate
-    return m_gas_inf, ym_inf, inf_rate
+    if get_rates:
+        return m_gas_inf_rate, ym_inf_rate, inf_density_rate
+    else:
+        return m_gas_inf_rate * dt, ym_inf_rate * dt, inf_density_rate
 
-def outflows(mass_loading, sfr, omega_zone, i_t, index, bins):
+def outflows(mass_loading, sfr, omega_zone, i_t, index, bins,
+             get_rates=False, current_time=None):
 
     """
 
@@ -1349,44 +1418,62 @@ def outflows(mass_loading, sfr, omega_zone, i_t, index, bins):
     i_t: float
     Timestep index for the timestep of interest
 
+    get_rates: bool
+    Get rates instead of total quantities for the integration
+    Default: False
+
+    current_time: float, range [age[i_t], age[i_t + 1]]
+    If provided, interpolate into current_time
+
     """
 
     # Outflow rate in Msun / (yr * kpc ** 2)
-    out_rate = mass_loading * sfr
+    out_density_rate = mass_loading * sfr
+
+    if current_time is None:
+        age = omega_zone.history.age[i_t]
+    else:
+        age = current_time
 
     # Get the dt
     if i_t < len(omega_zone.history.age) - 1:
-        dt = omega_zone.history.age[i_t + 1] - omega_zone.history.age[i_t]
+        dt = omega_zone.history.age[i_t + 1] - age
     else:
         dt = 0
 
     # Mass of gas going out in Msun
-    m_gas_out = out_rate * dt * get_area(index, bins)
+    m_gas_out_rate = out_density_rate * get_area(index, bins)
+
+    # Interpolate ymgal
+    ymgal = get_value_from_arr(omega_zone.ymgal, x_arr=omega_zone.history.age,
+                               xval=current_time, i_x=i_t)
 
     # Composition of the gas going out
-    # TODO why is the outflow composition primordial?
-    # TODO change for zone composition
-    #fraction of the zone that is the outflowing gas
-    frac_out = m_gas_out/sum(omega_zone.ymgal[i_t])
-    
-    #calculating the chemical composition of that fraction
-    ym_out = omega_zone.ymgal[i_t] * frac_out
+    # Fraction of the zone that is the outflowing gas
+    frac_out_rate = m_gas_out_rate / np.sum(ymgal)
+
+    # Calculating the chemical composition of that fraction
+    ym_out_rate = ymgal * frac_out_rate
 
     # Return the mass of gas, the chemical composition and outflow rate
-    return m_gas_out, ym_out, out_rate
+    if get_rates:
+        return m_gas_out_rate, ym_out_rate, out_density_rate
+    else:
+        return m_gas_out_rate * dt, ym_out_rate * dt, out_density_rate
 
 def migration(index, vers, omegas, bins, fstar, i_t, coeff, minf, mass_loading,
-              a=-1.267, b=1.033, KS_pow=1):
+              a=-1.267, b=1.033, KS_pow=1, get_rates=False, current_time=None):
 
     """
 
-    Function to move the gas in and out of each zone via inflow, outflow and radial flow.
+    Function to move the gas in and out of each zone via inflow, outflow
+    and radial flow.
 
     Input Parameters:
     =================
 
     index: int
-    Index of the omega zone from 0 to number of zones-1. The value must be an integer
+    Index of the omega zone from 0 to number of zones-1
 
     vers: list
     List of the omega zone version names
@@ -1404,7 +1491,8 @@ def migration(index, vers, omegas, bins, fstar, i_t, coeff, minf, mass_loading,
     Timestep index through the evolution when the migration is occurring
 
     coeff: float
-    Constant coefficient for the migration of gas, as a percentage of total mass in the zone
+    Constant coefficient for the migration of gas, as a percentage of total
+    mass in the zone
     (Default = 0, i.e. no radial flows)
 
     minf: float
@@ -1425,11 +1513,32 @@ def migration(index, vers, omegas, bins, fstar, i_t, coeff, minf, mass_loading,
     Value of exponent if using modified Kennicutt-Schmdit SF law
     (Default = 1)
 
+    get_rates: bool
+    Get rates instead of total quantities for the integration
+    Default: False
+
+    current_time: float, range [age[i_t], age[i_t + 1]]
+    If provided, interpolate into current_time
+
     """
+
+    # Grab the current and next ymgal
+    ymgal = get_value_from_arr(omegas[vers[index]].ymgal,
+                               x_arr=omegas[vers[index]].history.age,
+                               xval=current_time, i_x=i_t)
+
+    # Get the next one. The 0 value is to avoid having
+    # the same conditional check later
+    if index < len(vers) - 1:
+        ymgal_p1 = get_value_from_arr(omegas[vers[index + 1]].ymgal,
+                                      x_arr=omegas[vers[index + 1]].history.age,
+                                      xval=current_time, i_x=i_t)
+    else:
+        ymgal_p1 = 0
 
     # Calculation for gas surface density for the zone
     # and setting a threshold of gas surface density needed to form stars
-    mass_sum = np.sum(omegas[vers[index]].ymgal[i_t])
+    mass_sum = np.sum(ymgal)
 
     # In Msun / pc ** 2
     gas_surf_density = mass_sum / get_area(index, bins) * 1e6
@@ -1443,26 +1552,24 @@ def migration(index, vers, omegas, bins, fstar, i_t, coeff, minf, mass_loading,
         sfr = (fstar * mass_sum / get_area(index, bins)) ** KS_pow
 
     # Calculate the gas gained and lost
-    gas_gained = inflows(i_t, index, bins[index]["centre"], omegas[vers[index]], minf,
-                         bins, a, b)[1]
+    gas_gained = inflows(i_t, index, bins[index]["centre"],
+                         omegas[vers[index]], minf, bins, a, b,
+                         get_rates=get_rates, current_time=current_time)[1]
     gas_lost = outflows(mass_loading, sfr, omegas[vers[index]], i_t, index,
-                        bins)[0]
+                        bins, get_rates=get_rates, current_time=current_time)[0]
 
     # Now correct them depending where we are
 
     # If we are everywhere but the outermost zone
     # then correct by adding the inflow from the outer zone
-    if index < len(vers) - 1:
-        radial_gained = coeff * omegas[vers[index + 1]].ymgal[i_t]
-        gas_gained += coeff * omegas[vers[index + 1]].ymgal[i_t]
-    else:
-        radial_gained = 0
+    radial_gained = coeff * ymgal_p1
+    gas_gained += coeff * ymgal_p1
 
     # If we are everywhere but the innermost zone
     # then correct by adding the outflow to the inner zone
     if index > 0:
-        radial_lost = np.sum(coeff * omegas[vers[index]].ymgal[i_t])
-        gas_lost += np.sum(coeff * omegas[vers[index]].ymgal[i_t])
+        radial_lost = np.sum(coeff * ymgal)
+        gas_lost += np.sum(coeff * ymgal)
     else:
         radial_lost = 0
 
@@ -1476,8 +1583,9 @@ def multizone(n_zones=10, mass=1e-12, start_radius=4, end_radius=16.5,
 
     """
 
-    Function which combines the capailities of make_zones, inflows and migration in order to make
-    the required number of omega zones and move gas between them at each timestep.
+    Function which combines the capailities of make_zones, inflows and
+    migration in order to make the required number of omega zones and move
+    gas between them at each timestep.
 
     Input Parameters:
     =================
@@ -1498,7 +1606,8 @@ def multizone(n_zones=10, mass=1e-12, start_radius=4, end_radius=16.5,
     Star formation efficiency [yr-1]
 
     coeff: float
-    Constant coefficient for the migration of gas, as a percentage of total mass in the zone
+    Constant coefficient for the migration of gas, as a percentage of total
+    mass in the zone
 
     minf: float
     Total mass of gas infalling throughout the simulation [Mo]
@@ -1513,27 +1622,32 @@ def multizone(n_zones=10, mass=1e-12, start_radius=4, end_radius=16.5,
     Value of exponent if using modified Kennicutt-Schmdit SF law
     (Default = 1)
 
-    mass_loading:float
+    mass_loading: float
     Dimensionless ratio between the outflow rate and the star formation rate
 
     kwargs_list: dictionary
     Properties of the chemical evolution model (see chem_evol, sygma, omega)
 
     give_return_info: boolean
-    Return the migration information: star formation rate [Mo yr-1 kpc-2], mass of gas lost [Mo], mass of gas gained [Mo for each isotope]
+    Return the migration information: star formation rate [Mo yr-1 kpc-2],
+    mass of gas lost [Mo], mass of gas gained [Mo for each isotope]
     Default Value: False, to activate give_return_info = True
 
     """
 
     vers, omegas, bins = make_zones(mass, start_radius, end_radius, n_zones)
 
-    # This may need to be altered with parameters that dictate length of timestep etc.
+    # This may need to be altered with parameters that dictate length of
+    # timestep etc.
     # This is the support omega instance, just to have the dummy variables
     o_default = omega.omega(**kwargs_list[0])
 
-    # The variable migr_info provides information about total gas gained and lost
-    # through all possible gas migration processes (so between zones and the CGM)
+    # The variable migr_info provides information about total gas gained
+    # and lost through all possible gas migration processes (so between zones
+    # and the CGM)
     # It does not contain only information about radial flows.
+
+    # TODO NOT FINISHED. OVERHAUL WHEN INTRODUCED IN ALPHA
 
     # TODO Return somewhere information about only radial flows
 
@@ -1544,7 +1658,8 @@ def multizone(n_zones=10, mass=1e-12, start_radius=4, end_radius=16.5,
         # Add migration information for every timestep
         for i in range(n_zones):
             migr_info[t].append(migration(i, vers, omegas, bins, fstar, t,
-                                          coeff, minf, mass_loading, a, b, KS_pow))
+                                          coeff, minf, mass_loading, a, b,
+                                          KS_pow))
 
             # Sanity check for mass.
             # TODO maybe put inside of omega?
@@ -1576,7 +1691,7 @@ def get_radii(bins):
 
     return radii
 
-def get_radial_SFR(vers, omegas, bins, fstar, i_t, KS_pow=1):
+def get_radial_SFR(vers, omegas, bins, fstar, i_t, KS_pow=1, current_time=None):
 
     """
 
@@ -1588,8 +1703,14 @@ def get_radial_SFR(vers, omegas, bins, fstar, i_t, KS_pow=1):
     rad_sfr = []
 
     for i in range(len(omegas)):
+
+        # Grab ymgal
+        ymgal = get_value_from_arr(omegas[vers[i]].ymgal,
+                                   x_arr=omegas[vers[i]].history.age,
+                                   xval=current_time, i_x=i_t)
+
         # Calculation for gas surface density for the zone:
-        mass_sum = np.sum(omegas[vers[i]].ymgal[i_t])
+        mass_sum = np.sum(ymgal)
 
         # In Msun / pc ** 2
         gas_surf_density = (mass_sum / get_area(i, bins)) * 1e6
@@ -1606,7 +1727,8 @@ def get_radial_SFR(vers, omegas, bins, fstar, i_t, KS_pow=1):
 
     return rad_sfr
 
-def get_outflow_rate(vers, omegas, bins, fstar, mass_loading, i_t, KS_pow=1):
+def get_outflow_rate(vers, omegas, bins, fstar, mass_loading, i_t, KS_pow=1,
+                     current_time=None):
 
     """
 
@@ -1615,14 +1737,15 @@ def get_outflow_rate(vers, omegas, bins, fstar, mass_loading, i_t, KS_pow=1):
     """
 
     # This is the radial SFR at a given timestep i_t
-    sfr_at_i_t = get_radial_SFR(vers, omegas, bins, fstar, i_t, KS_pow=KS_pow)
+    sfr_at_i_t = get_radial_SFR(vers, omegas, bins, fstar, i_t, KS_pow=KS_pow,
+                                current_time=current_time)
 
     # This is the radial outflow (SFR times mass loading)
     rad_outflow = mass_loading * sfr_at_i_t
 
     return rad_outflow
 
-def get_radial_mass(vers, omegas, bins, i_t):
+def get_radial_mass(vers, omegas, bins, i_t, current_time=None):
 
     """
 
@@ -1631,12 +1754,14 @@ def get_radial_mass(vers, omegas, bins, i_t):
 
     """
 
-    radial_masses = [np.sum(omegas[vers[i]].ymgal[i_t])
-                     for i in range(len(omegas))]
+    radial_masses = [np.sum(get_value_from_arr(omegas[vers[i]].ymgal,
+                                               x_arr=omegas[vers[i]].history.age,
+                                               xval=current_time, i_x=i_t))
+                    for i in range(len(omegas))]
 
     return radial_masses
 
-def get_radial_surface_mass(vers, omegas, bins, i_t):
+def get_radial_surface_mass(vers, omegas, bins, i_t, current_time=None):
 
     """
 
@@ -1646,7 +1771,8 @@ def get_radial_surface_mass(vers, omegas, bins, i_t):
     """
 
     rad_surface_mass = []
-    rad_mass_sum = get_radial_mass(vers, omegas, bins, i_t)
+    rad_mass_sum = get_radial_mass(vers, omegas, bins, i_t,
+                                   current_time=current_time)
 
     for i in range(len(omegas)):
         surf_mass = rad_mass_sum[i] / get_area(i, bins)
@@ -1654,7 +1780,7 @@ def get_radial_surface_mass(vers, omegas, bins, i_t):
 
     return rad_surface_mass
 
-def plot_vs_radius(y_arr, ylabel, omegas, bins, i_t):
+def plot_vs_radius(y_arr, ylabel, omegas, bins, i_t, current_time=None):
 
     """
 
@@ -1666,7 +1792,7 @@ def plot_vs_radius(y_arr, ylabel, omegas, bins, i_t):
     xlabel = "Radius (kpc)"
 
     # TODO label would be better as age but leave for now
-    age = omegas["omega0"].history.age[i_t] / 1e9
+    age = omegas["omega0"].history.age[i_t] * 1e-9
     label = f"{age:.2f} Gyr"
 
     plt.plot(radii, y_arr, marker='o', label=label)
@@ -1697,8 +1823,8 @@ def plot_inflow_rate(vers, omegas, bins, i_t, minf, a=-1.267, b=1.033):
     """
 
     ylabel = 'Inflow Rate (M$_{\odot}$yr$^{-1}$kpc$^{-2}$)'
-    in_rate = [inflows(i_t, i, x[0]["centre"], omegas[x[1]], minf, bins, a, b)[2] for
-               i, x in enumerate(zip(bins, omegas))]
+    in_rate = [inflows(i_t, i, x[0]["centre"], omegas[x[1]], minf, bins, a, b)[2]
+               for i, x in enumerate(zip(bins, omegas))]
 
     plot_vs_radius(in_rate, ylabel, omegas, bins, i_t)
 
@@ -1886,11 +2012,12 @@ ts = [0, 7, 15, 22, 25, 28, 30]
 plt.figure(2, (10,6))
 
 # TODO
-get_exp_scale_length(vers_test, omegas_test, bins_test)
+#get_exp_scale_length(vers_test, omegas_test, bins_test)
 
 for i in ts:
     plot_radial_surface_mass(vers_test, omegas_test, bins_test, i)
     #plot_inflow_rate(vers_test, omegas_test, bins_test, i, 1e11)
+    #plot_outflow_rate(vers_test, omegas_test, bins_test, 0, 1e11, i)
 
 plt.show()
 
