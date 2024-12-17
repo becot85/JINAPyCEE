@@ -1363,7 +1363,7 @@ def inflows(i_t, index, bin_radius, omega_zone, minf, bins, a=-1.267, b=1.033,
                               bins[-1]["rout"])[0]
 
     # In Gyr
-    tau = a + b * bin_radius
+    tau = a + (b * bin_radius)
 
     # Msun / (Gyr * kpc ** 2)
     i0 = A * np.exp(-bin_radius / h)
@@ -1579,11 +1579,11 @@ def migration(index, vers, omegas, bins, fstar, i_t, coeff, minf, mass_loading,
 
     # If we are everywhere but the innermost zone
     # then correct by adding the outflow to the inner zone
-    if index > 0:
-        radial_lost = np.sum(coeff * ymgal)
-        gas_lost += np.sum(coeff * ymgal)
-    else:
-        radial_lost = 0
+    #if index > 0:
+    radial_lost = np.sum(coeff * ymgal)
+    gas_lost += np.sum(coeff * ymgal)
+    #else:
+        #radial_lost = 0
 
     # Star formation rate, gas lost and gas gained for this zone
     
@@ -1592,7 +1592,7 @@ def migration(index, vers, omegas, bins, fstar, i_t, coeff, minf, mass_loading,
 
 
 def multizone(n_zones=10, mass=1e-12, start_radius=4, end_radius=16.5,
-              fstar=2.5e-4, coeff=0, minf=1e10, mass_loading=0,
+              fstar=2.5e-4, vrad=0, minf=1e10, mass_loading=0,
               kwargs_list=[{}], a=-1.267, b=1.033, KS_pow=1,
               give_return_info=False):
     
@@ -1650,7 +1650,9 @@ def multizone(n_zones=10, mass=1e-12, start_radius=4, end_radius=16.5,
 
     """
     
-    vers, omegas, bins = make_zones(mass, start_radius, end_radius, n_zones)
+    kms_kpcyr = 9.735e8
+    
+    vers, omegas, bins = make_zones(mass, start_radius, end_radius, n_zones, kwargs_list)
 
     # This may need to be altered with parameters that dictate length of
     # timestep etc.
@@ -1672,8 +1674,13 @@ def multizone(n_zones=10, mass=1e-12, start_radius=4, end_radius=16.5,
         
         # Add migration information for every timestep
         for i in range(n_zones):
+            
+            coeff_val = (((vrad/kms_kpcyr)*omegas[vers[i]].history.timesteps[t] + bins[i]['rin'])**2 \
+                 - bins[i]['rin']**2)/ (bins[i]['rout']**2 - bins[i]['rout']**2)
+            
+            
             migr_info[t].append(migration(i, vers, omegas, bins, fstar, t,
-                                          coeff, minf, mass_loading, a, b,
+                                          coeff_val, minf, mass_loading, a, b,
                                           KS_pow))
 
             # Sanity check for mass.
@@ -1817,7 +1824,7 @@ def get_radial_surface_mass_gas_stars(vers, omegas, bins, i_t):
         #calculating stellar mass at i_t
         mdot = 0.0
         for time in range(0,i_t):
-            mdot += np.sum(omegas[vers[i]].mdot[i_t])
+            mdot += np.sum(omegas[vers[i]].mdot[time])
         mlocked = np.sum(omegas[vers[i]].history.m_locked[0:i_t])
         
         star_sum = mlocked - mdot
@@ -1827,16 +1834,41 @@ def get_radial_surface_mass_gas_stars(vers, omegas, bins, i_t):
     
     return rad_surface_mass_total
 
+
+def get_radial_stellar_density(vers, omegas, bins, i_t):
+    
+    "Get radial stellar surface density for a given timestep"
+    
+    if i_t == -1:
+        i_t = omegas['omega0'].nb_timesteps
+    
+    rad_stellar_dens = []
+    
+    for i in range(len(omegas)):
+    
+        mdot = 0.0
+        for time in range(0, i_t):
+            mdot += np.sum(omegas[vers[i]].mdot[time])#this needs to be TIME
+        mlocked = np.sum(omegas[vers[i]].history.m_locked[0:i_t])
+    
+        star_sum = mlocked - mdot
+    
+        surf_stars = star_sum/get_area(i, bins)
+        rad_stellar_dens.append(surf_stars)
+    
+    return rad_stellar_dens
+
 def get_exp_scale_length(vers, omegas, bins):
     
     """
     
-    Find the exponential scale length of the model using gas surface density at the final timestep
+    Find the exponential scale length of the model using gas surface density at a given timestep
     
     """
     
     #gas surface density as a function of radius for the final timestep
-    sm_final = get_radial_surface_mass(vers, omegas, bins, -1) 
+
+    sm_final = get_radial_surface_mass(vers, omegas, bins, i_t) 
     
     
     reg = linregress(get_radii(bins), np.log(sm_final))
@@ -1851,12 +1883,12 @@ def get_exp_scale_length_tot_mass(vers, omegas, bins): #this version uses TOTAL 
     
     """
     
-    Find the exponential scale length of the model using mass surface density         at the final timestep
+    Find the exponential scale length of the model using mass surface density for a given timestep
     
     """
     
     #gas surface density as a function of radius for the final timestep
-    sm_final = get_radial_surface_mass_gas_stars(vers, omegas, bins, -1) 
+    sm_final = get_radial_surface_mass_gas_stars(vers, omegas, bins, i_t) 
     
     
     reg = linregress(get_radii(bins), np.log(sm_final))
@@ -1921,7 +1953,7 @@ def plot_inflow_rate(vers, omegas, bins, i_t, minf, a = -1.267, b = 1.033):
         
     plot_vs_radius(in_rate, ylabel, omegas, bins, i_t)
     
-def plot_radial_sfr(vers, omegas, bins, fstar, i_t):
+def plot_radial_sfr(vers, omegas, bins, fstar, i_t, KS_pow=1):
 
     """
 
@@ -1930,11 +1962,11 @@ def plot_radial_sfr(vers, omegas, bins, fstar, i_t):
     """
 
     ylabel = 'SFR (M$_{\odot}$yr$^{-1}$kpc$^{-2}$)'
-    radial_SFR = get_radial_SFR(vers, omegas, bins, fstar, i_t)
+    radial_SFR = get_radial_SFR(vers, omegas, bins, fstar, i_t, KS_pow)
 
     plot_vs_radius(radial_SFR, ylabel, omegas, bins, i_t)
 
-def plot_outflow_rate(vers, omegas, bins, fstar, mass_loading, i_t):
+def plot_outflow_rate(vers, omegas, bins, fstar, mass_loading, i_t, KS_pow):
 
     """
 
@@ -1943,7 +1975,7 @@ def plot_outflow_rate(vers, omegas, bins, fstar, mass_loading, i_t):
     """
 
     ylabel = 'Outflow Rate (M$_{\odot}$yr$^{-1}$kpc$^{-2}$)'
-    outflow_rate = get_outflow_rate(vers, omegas, bins, fstar, mass_loading, i_t)
+    outflow_rate = get_outflow_rate(vers, omegas, bins, fstar, mass_loading, i_t, KS_pow)
 
     plot_vs_radius(outflow_rate, ylabel, omegas, bins, i_t)
 
@@ -1986,6 +2018,16 @@ def plot_radial_surface_mass_gas_stars(vers, omegas, bins, i_t):
     radial_surface_mass = get_radial_surface_mass_gas_stars(vers, omegas, bins, i_t)
     
     plot_vs_radius(radial_surface_mass, ylabel, omegas, bins, i_t)
+    
+    return
+
+
+def plot_radial_stellar_density(vers, omegas, bins, i_t):
+    
+    ylabel = 'Zone surface stellar density (M$_{\odot}$ kpc$^{-2}$)'
+    radial_stellar_density = get_radial_stellar_density(vers, omegas, bins, i_t)
+    
+    plot_vs_radius(radial_stellar_density, ylabel, omegas, bins, i_t)
     
     return
 
